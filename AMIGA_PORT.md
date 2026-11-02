@@ -1,6 +1,6 @@
 # Amiga port intake: Blobby Volley 2
 
-- Port Atlas: [g-blobby-volley-2](https://www.amigachrome.com/ports/#g-blobby-volley-2)
+- Port Atlas: [g-blobby-volley-2](https://www.amicradle.com/ports/#g-blobby-volley-2)
 - Priority: `P1`
 - Atlas decision: `evaluate`
 - Upstream source: `https://github.com/angelonuffer/blobby-volley-2`
