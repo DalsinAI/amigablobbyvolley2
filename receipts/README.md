@@ -14,3 +14,5 @@ was built; the receipt is committed after it.
 | `3-input-open5-stove_build.json` | Cradle `stove_build` of `8c1fcd8`, target `.` (job `j20261103T033354-cfff1a`) | Cradle's `os32-gcc16` stove (open5) | `649dad635be1813b35bb3923d906b1a8c6b9e60861d9c5a97ba10c623d10860e` |
 | `3-data.json` | Cradle `stove_build` of `8c1fcd8`, target `runtime-data` (job `j20261103T033437-3c50a9`) | Cradle (open5) | `fd4a9f1c735f23df04898484d23610ef6bea729a0de2c445ee92bdb36eedc8a5` |
 | `4-sound-open5-stove_build.json` | Cradle `stove_build` of `e4a2ad4`, target `.` (job `j20261103T034436-8ab34b`) | Cradle's `os32-gcc16` stove (open5) | `b277843c408c1cac32ada334b84a90a246bfb6e8a7dd6edb7066af2c0b7e64b9` |
+| `6-package-open5-stove_build.json` | Cradle `stove_build` of `165e9a2`, target `package` (job `j20261103T035627-058ea7`) | Cradle's `os32-gcc16` stove (open5) | `e7a9c92f7254b073793269dc14ced2f8c83fdc74de05b0199a9488bfe57dcfad` |
+| `6-data.json` | the same job's data | Cradle (open5) | `c85baf05ce6f9cdbdd9e5dea603da26daed815558430bf51e08a554514083d0f` |
