@@ -46,9 +46,18 @@ for n in sorted(set(names)):
         sys.exit(f"missing: {n}")
     print(n)
 PY
-(cd "$ROOT" && while read -r f; do sha256sum "$f"; done < "$LIST") > "$OUT/SHA256SUMS"
+# the patches touch data too (patches/0006: the settings' defaults), so the
+# data is packed from a patched copy, as build-amiga.sh builds the code
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/blobby-data.XXXXXX")
+trap 'rm -rf "$WORK"' EXIT INT TERM
+cp -R "$ROOT/src" "$ROOT/data" "$WORK/"
+for patch in "$ROOT"/patches/*.patch; do
+    [ -f "$patch" ] || continue
+    patch --batch --forward --fuzz=0 -p1 -d "$WORK" < "$patch" > /dev/null
+done
+(cd "$WORK" && while read -r f; do sha256sum "$f"; done < "$LIST") > "$OUT/SHA256SUMS"
 # the same bytes from the same files: names sorted, owners and times fixed
-(cd "$ROOT" && tar --format=ustar --no-recursion --owner=0 --group=0 --numeric-owner \
+(cd "$WORK" && tar --format=ustar --no-recursion --owner=0 --group=0 --numeric-owner \
     --mode='u=rw,go=r' --mtime="@$EPOCH" -cf "$OUT/blobby-data.tar" -T "$LIST")
 rm -f "$LIST"
 
