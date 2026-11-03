@@ -1,0 +1,32 @@
+diff --git a/src/state/State.cpp b/src/state/State.cpp
+index a6bae27..c891822 100644
+--- a/src/state/State.cpp
++++ b/src/state/State.cpp
+@@ -25,7 +25,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #include "ScriptedInputSource.h"
+ #include "SoundManager.h"
+ #include "IMGUI.h"
++#ifndef BLOBBY_NO_NETWORK
+ #include "NetworkState.h"
++#endif
+ #include "OptionsState.h"
+ #include "TextManager.h"
+ #include "SpeedController.h"
+@@ -125,6 +127,9 @@ void MainMenuState::step()
+     imgui.doImage(GEN_ID, Vector2(400.0, 300.0), "background");
+     imgui.doOverlay(GEN_ID, Vector2(0.0, 0.0), Vector2(800.0, 600.0));
+     imgui.doImage(GEN_ID, Vector2(250.0, 210.0), "gfx/titel.bmp");
++#ifndef BLOBBY_NO_NETWORK
++    // built without RakNet (BLOBBY_NO_NETWORK), the game has no online
++    // or network play and offers none
+     if (imgui.doButton(GEN_ID, Vector2(434, 350.0), TextManager::getSingleton()->getString(TextManager::MNU_LABEL_ONLINE)))
+     {
+         deleteCurrentState();
+@@ -135,6 +140,7 @@ void MainMenuState::step()
+         deleteCurrentState();
+         setCurrentState(new LANSearchState());
+     }
++#endif
+     if (imgui.doButton(GEN_ID, Vector2(434.0, 410.0), TextManager::getSingleton()->getString(TextManager::MNU_LABEL_START)))
+     {
+         try

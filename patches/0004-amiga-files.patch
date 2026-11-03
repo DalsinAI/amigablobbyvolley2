@@ -1,0 +1,508 @@
+diff --git a/src/dirfs/physfs.h b/src/dirfs/physfs.h
+new file mode 100644
+index 0000000..23b0184
+--- /dev/null
++++ b/src/dirfs/physfs.h
+@@ -0,0 +1,75 @@
++/*=============================================================================
++Blobby Volley 2
++dirfs/physfs.h: the part of PhysicsFS's interface Blobby Volley 2 uses,
++on plain directories
++Copyright (C) 2026 AmiCradle Team
++
++This program is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 2 of the License, or
++(at your option) any later version.
++
++This program is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++=============================================================================*/
++
++/*
++ * Blobby Volley 2 reads its data and writes its settings and replays
++ * through PhysicsFS: a search path of directories and archives, and one
++ * directory written to. The AmigaOS 3.x SDK has no PhysicsFS, and the
++ * game needs only the calls below, so this is them, on directories alone
++ * (no archives: the game data is shipped as its own drawers, not as
++ * .zip files). The names, types and meanings are PhysicsFS 2.0's, for the
++ * calls the game makes; paths are PhysicsFS paths ("gfx/ball01.bmp"),
++ * joined to each directory of the search path (an AmigaOS directory may
++ * end in ':' or '/', as "PROGDIR:" does).
++ */
++
++#pragma once
++
++#include <stddef.h>
++
++typedef unsigned char PHYSFS_uint8;
++typedef signed char PHYSFS_sint8;
++typedef unsigned short PHYSFS_uint16;
++typedef signed short PHYSFS_sint16;
++typedef unsigned int PHYSFS_uint32;
++typedef signed int PHYSFS_sint32;
++typedef unsigned long long PHYSFS_uint64;
++typedef signed long long PHYSFS_sint64;
++
++typedef struct PHYSFS_File
++{
++	void* opaque;
++} PHYSFS_File;
++typedef PHYSFS_File PHYSFS_file;
++
++int PHYSFS_init(const char* argv0);
++int PHYSFS_deinit(void);
++const char* PHYSFS_getLastError(void);
++const char* PHYSFS_getDirSeparator(void);
++const char* PHYSFS_getBaseDir(void);
++const char* PHYSFS_getUserDir(void);
++
++int PHYSFS_addToSearchPath(const char* newDir, int appendToPath);
++int PHYSFS_removeFromSearchPath(const char* oldDir);
++int PHYSFS_setWriteDir(const char* newDir);
++const char* PHYSFS_getWriteDir(void);
++
++PHYSFS_File* PHYSFS_openRead(const char* filename);
++PHYSFS_File* PHYSFS_openWrite(const char* filename);
++int PHYSFS_close(PHYSFS_File* handle);
++PHYSFS_sint64 PHYSFS_read(PHYSFS_File* handle, void* buffer,
++	PHYSFS_uint32 objSize, PHYSFS_uint32 objCount);
++PHYSFS_sint64 PHYSFS_write(PHYSFS_File* handle, const void* buffer,
++	PHYSFS_uint32 objSize, PHYSFS_uint32 objCount);
++PHYSFS_sint64 PHYSFS_fileLength(PHYSFS_File* handle);
++
++int PHYSFS_exists(const char* fname);
++int PHYSFS_isDirectory(const char* fname);
++int PHYSFS_mkdir(const char* dirName);
++int PHYSFS_delete(const char* filename);
++char** PHYSFS_enumerateFiles(const char* dir);
++void PHYSFS_freeList(void* listVar);
+diff --git a/src/dirfs/physfs_dirs.cpp b/src/dirfs/physfs_dirs.cpp
+new file mode 100644
+index 0000000..ed5ee11
+--- /dev/null
++++ b/src/dirfs/physfs_dirs.cpp
+@@ -0,0 +1,389 @@
++/*=============================================================================
++Blobby Volley 2
++dirfs/physfs_dirs.cpp: the PhysicsFS calls Blobby Volley 2 makes, on plain
++directories (see physfs.h)
++Copyright (C) 2026 AmiCradle Team
++
++This program is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 2 of the License, or
++(at your option) any later version.
++
++This program is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++=============================================================================*/
++
++#include "physfs.h"
++
++#include <algorithm>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <string>
++#include <vector>
++
++// libnix (AmigaOS) has these as POSIX has them: stat() and the
++// directory calls go through AmigaDOS locks
++#include <dirent.h>
++#include <sys/stat.h>
++#include <unistd.h>
++
++namespace
++{
++	std::vector<std::string> searchPath;
++	std::string writeDir;
++	bool haveWriteDir = false;
++	std::string lastError;
++	std::string userDir;
++
++	bool fail(const char* why)
++	{
++		lastError = why;
++		return false;
++	}
++
++	// a PhysicsFS path joined to a directory of the host
++	std::string join(const std::string& dir, const std::string& path)
++	{
++		if (dir.empty())
++			return path;
++		if (path.empty())
++			return dir;
++		char last = dir[dir.size() - 1];
++		if (last == '/' || last == ':')
++			return dir + path;
++		return dir + "/" + path;
++	}
++
++	// what the game may ask for: relative, no "..", no device names
++	bool safePath(const char* path)
++	{
++		if (!path)
++			return false;
++		std::string p(path);
++		if (p.find(':') != std::string::npos || p.find('\\') != std::string::npos)
++			return false;
++		if (!p.empty() && p[0] == '/')
++			return false;
++		size_t start = 0;
++		while (start <= p.size())
++		{
++			size_t end = p.find('/', start);
++			if (end == std::string::npos)
++				end = p.size();
++			std::string part = p.substr(start, end - start);
++			if (part == "..")
++				return false;
++			start = end + 1;
++		}
++		return true;
++	}
++
++	// strips a trailing '/' (but not from "PROGDIR:" or "/")
++	std::string trimmed(const std::string& path)
++	{
++		std::string p = path;
++		while (p.size() > 1 && p[p.size() - 1] == '/' && p[p.size() - 2] != ':')
++			p.erase(p.size() - 1);
++		return p;
++	}
++
++	// 1 a directory, 0 a file, -1 nothing there
++	int nativeKind(const std::string& path)
++	{
++		struct stat st;
++		if (stat(path.c_str(), &st) != 0)
++			return -1;
++		return S_ISDIR(st.st_mode) ? 1 : 0;
++	}
++
++	void nativeList(const std::string& path, std::vector<std::string>& names)
++	{
++		DIR* dir = opendir(path.c_str());
++		if (!dir)
++			return;
++		while (struct dirent* entry = readdir(dir))
++		{
++			std::string name(entry->d_name);
++			if (name != "." && name != "..")
++				names.push_back(name);
++		}
++		closedir(dir);
++	}
++
++	bool nativeMkdir(const std::string& path)
++	{
++		return mkdir(path.c_str(), 0755) == 0;
++	}
++
++	bool nativeDelete(const std::string& path)
++	{
++		if (nativeKind(path) == 1)
++			return rmdir(path.c_str()) == 0;
++		return unlink(path.c_str()) == 0;
++	}
++
++	PHYSFS_File* wrap(FILE* file)
++	{
++		PHYSFS_File* handle = new PHYSFS_File;
++		handle->opaque = file;
++		return handle;
++	}
++
++	FILE* unwrap(PHYSFS_File* handle)
++	{
++		return handle ? (FILE*)handle->opaque : 0;
++	}
++}
++
++int PHYSFS_init(const char* argv0)
++{
++	(void)argv0;
++	searchPath.clear();
++	haveWriteDir = false;
++	writeDir.clear();
++	return 1;
++}
++
++int PHYSFS_deinit(void)
++{
++	searchPath.clear();
++	haveWriteDir = false;
++	writeDir.clear();
++	return 1;
++}
++
++const char* PHYSFS_getLastError(void)
++{
++	return lastError.empty() ? 0 : lastError.c_str();
++}
++
++const char* PHYSFS_getDirSeparator(void)
++{
++	return "/";
++}
++
++const char* PHYSFS_getBaseDir(void)
++{
++#if defined(__amigaos__)
++	return "PROGDIR:";
++#else
++	return "./";
++#endif
++}
++
++const char* PHYSFS_getUserDir(void)
++{
++#if defined(__amigaos__)
++	userDir = "PROGDIR:";
++#else
++	const char* home = getenv("HOME");
++	userDir = home ? std::string(home) + "/" : std::string("./");
++#endif
++	return userDir.c_str();
++}
++
++int PHYSFS_addToSearchPath(const char* newDir, int appendToPath)
++{
++	if (!newDir)
++		return fail("no directory");
++	std::string dir = trimmed(newDir);
++	if (std::find(searchPath.begin(), searchPath.end(), dir) != searchPath.end())
++		return 1;
++	// directories only: an archive (gfx.zip) is not taken
++	if (nativeKind(dir) != 1)
++		return fail("not a directory");
++	if (appendToPath)
++		searchPath.push_back(dir);
++	else
++		searchPath.insert(searchPath.begin(), dir);
++	return 1;
++}
++
++int PHYSFS_removeFromSearchPath(const char* oldDir)
++{
++	if (!oldDir)
++		return fail("no directory");
++	std::vector<std::string>::iterator it =
++		std::find(searchPath.begin(), searchPath.end(), trimmed(oldDir));
++	if (it == searchPath.end())
++		return fail("not in the search path");
++	searchPath.erase(it);
++	return 1;
++}
++
++int PHYSFS_setWriteDir(const char* newDir)
++{
++	if (!newDir)
++	{
++		haveWriteDir = false;
++		writeDir.clear();
++		return 1;
++	}
++	std::string dir = trimmed(newDir);
++	if (nativeKind(dir) != 1)
++		return fail("not a directory");
++	writeDir = dir;
++	haveWriteDir = true;
++	return 1;
++}
++
++const char* PHYSFS_getWriteDir(void)
++{
++	return haveWriteDir ? writeDir.c_str() : 0;
++}
++
++PHYSFS_File* PHYSFS_openRead(const char* filename)
++{
++	if (!safePath(filename))
++		return (fail("bad path"), (PHYSFS_File*)0);
++	for (size_t i = 0; i < searchPath.size(); ++i)
++	{
++		std::string path = join(searchPath[i], filename);
++		if (nativeKind(path) != 0)
++			continue;
++		FILE* file = fopen(path.c_str(), "rb");
++		if (file)
++			return wrap(file);
++	}
++	fail("not found");
++	return 0;
++}
++
++PHYSFS_File* PHYSFS_openWrite(const char* filename)
++{
++	if (!haveWriteDir || !safePath(filename))
++		return (fail("no write directory"), (PHYSFS_File*)0);
++	FILE* file = fopen(join(writeDir, filename).c_str(), "wb");
++	if (!file)
++		return (fail("could not open for writing"), (PHYSFS_File*)0);
++	return wrap(file);
++}
++
++int PHYSFS_close(PHYSFS_File* handle)
++{
++	FILE* file = unwrap(handle);
++	if (!file)
++		return fail("no file");
++	int ok = fclose(file) == 0;
++	delete handle;
++	return ok ? 1 : fail("close failed");
++}
++
++PHYSFS_sint64 PHYSFS_read(PHYSFS_File* handle, void* buffer,
++	PHYSFS_uint32 objSize, PHYSFS_uint32 objCount)
++{
++	FILE* file = unwrap(handle);
++	if (!file || objSize == 0)
++		return file ? 0 : -1;
++	return (PHYSFS_sint64)fread(buffer, objSize, objCount, file);
++}
++
++PHYSFS_sint64 PHYSFS_write(PHYSFS_File* handle, const void* buffer,
++	PHYSFS_uint32 objSize, PHYSFS_uint32 objCount)
++{
++	FILE* file = unwrap(handle);
++	if (!file || objSize == 0)
++		return file ? 0 : -1;
++	return (PHYSFS_sint64)fwrite(buffer, objSize, objCount, file);
++}
++
++PHYSFS_sint64 PHYSFS_fileLength(PHYSFS_File* handle)
++{
++	FILE* file = unwrap(handle);
++	if (!file)
++		return -1;
++	long here = ftell(file);
++	if (here < 0 || fseek(file, 0, SEEK_END) != 0)
++		return -1;
++	long length = ftell(file);
++	fseek(file, here, SEEK_SET);
++	return length;
++}
++
++int PHYSFS_exists(const char* fname)
++{
++	if (!safePath(fname))
++		return 0;
++	for (size_t i = 0; i < searchPath.size(); ++i)
++		if (nativeKind(join(searchPath[i], fname)) >= 0)
++			return 1;
++	return 0;
++}
++
++int PHYSFS_isDirectory(const char* fname)
++{
++	if (!safePath(fname))
++		return 0;
++	for (size_t i = 0; i < searchPath.size(); ++i)
++	{
++		int kind = nativeKind(join(searchPath[i], fname));
++		if (kind >= 0)
++			return kind == 1;
++	}
++	return 0;
++}
++
++int PHYSFS_mkdir(const char* dirName)
++{
++	if (!haveWriteDir || !safePath(dirName))
++		return fail("no write directory");
++	std::string path(dirName);
++	size_t start = 0;
++	while (start < path.size())
++	{
++		size_t end = path.find('/', start);
++		if (end == std::string::npos)
++			end = path.size();
++		std::string native = join(writeDir, path.substr(0, end));
++		int kind = nativeKind(native);
++		if (kind == 0)
++			return fail("a file is in the way");
++		if (kind < 0 && !nativeMkdir(native))
++			return fail("could not make the directory");
++		start = end + 1;
++	}
++	return 1;
++}
++
++int PHYSFS_delete(const char* filename)
++{
++	if (!haveWriteDir || !safePath(filename))
++		return fail("no write directory");
++	return nativeDelete(join(writeDir, filename)) ? 1 : fail("could not delete");
++}
++
++char** PHYSFS_enumerateFiles(const char* dir)
++{
++	std::vector<std::string> names;
++	if (safePath(dir))
++	{
++		for (size_t i = 0; i < searchPath.size(); ++i)
++			nativeList(join(searchPath[i], dir), names);
++	}
++	std::sort(names.begin(), names.end());
++	names.erase(std::unique(names.begin(), names.end()), names.end());
++	char** list = (char**)malloc((names.size() + 1) * sizeof(char*));
++	if (!list)
++		return 0;
++	for (size_t i = 0; i < names.size(); ++i)
++	{
++		list[i] = (char*)malloc(names[i].size() + 1);
++		if (list[i])
++			memcpy(list[i], names[i].c_str(), names[i].size() + 1);
++	}
++	list[names.size()] = 0;
++	return list;
++}
++
++void PHYSFS_freeList(void* listVar)
++{
++	char** list = (char**)listVar;
++	if (!list)
++		return;
++	for (size_t i = 0; list[i]; ++i)
++		free(list[i]);
++	free(list);
++}
+diff --git a/src/main.cpp b/src/main.cpp
+index 330f124..232e78a 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -88,7 +88,26 @@ void setupPHYSFS()
+     PHYSFS_addToSearchPath("data/scripts.zip", 1);
+     PHYSFS_addToSearchPath("data/backgrounds.zip", 1);
+ 
+-#if defined(WIN32)
++#if defined(__amigaos__)
++    // AmigaOS: the data in the program's own drawer (PROGDIR:data, as
++    // drawers, not .zip archives), settings and replays in
++    // PROGDIR:User, made on the first start and read before the data
++    PHYSFS_addToSearchPath("PROGDIR:data", 1);
++    if (PHYSFS_setWriteDir("PROGDIR:"))
++    {
++        PHYSFS_addToSearchPath("PROGDIR:", 0);
++        probeDir("User");
++        PHYSFS_removeFromSearchPath("PROGDIR:");
++    }
++    if (PHYSFS_setWriteDir("PROGDIR:User"))
++    {
++        PHYSFS_addToSearchPath("PROGDIR:User", 0);
++        probeDir("replays");
++    }
++    else
++        std::cerr << "Warning: PROGDIR:User could not be made; "
++            "settings and replays will not be saved" << std::endl;
++#elif defined(WIN32)
+     // Just write in installation directory
+     PHYSFS_setWriteDir("data");
+ #else

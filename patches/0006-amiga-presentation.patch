@@ -1,0 +1,110 @@
+diff --git a/data/config.xml b/data/config.xml
+index 07e1710..741ac1d 100644
+--- a/data/config.xml
++++ b/data/config.xml
+@@ -2,7 +2,7 @@
+ 
+ <userconfig>
+ 	<var name="device" value="SDL"/>
+-	<var name="fullscreen" value="false"/>
++	<var name="fullscreen" value="true"/>
+ 	<var name="left_blobby_color_r" value="0"/>
+ 	<var name="left_blobby_color_g" value="0"/>
+ 	<var name="left_blobby_color_b" value="255"/>
+diff --git a/src/RenderManagerSDL.cpp b/src/RenderManagerSDL.cpp
+index a596dfd..6f4afc3 100644
+--- a/src/RenderManagerSDL.cpp
++++ b/src/RenderManagerSDL.cpp
+@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #include "RenderManagerSDL.h"
+ 
+ #include <stdexcept>
++#include <cstdio>
+ 
+ 
+ RenderManagerSDL::DynamicColoredSurface RenderManagerSDL::colorSurface(SDL_Surface *surface, Color color)
+@@ -119,6 +120,13 @@ void RenderManagerSDL::init(int xResolution, int yResolution, bool fullscreen)
+ 		throw std::runtime_error(std::string("Couldn't get the window's surface: ") + SDL_GetError());
+ 	blobby_sdl2_set_window(mWindow);
+ 	SDL_ShowCursor(0);
++#if defined(__amigaos__)
++	// the screen the game got, for the log
++	printf("%s %dx%d, %s, %d bytes a row\n",
++		fullscreen ? "screen" : "window", mScreen->w, mScreen->h,
++		SDL_GetPixelFormatName(mScreen->format->format), mScreen->pitch);
++	fflush(stdout);
++#endif
+ 
+ 	mOverlaySurface = SDL_CreateRGBSurface(0,
+ 		mScreen->w, mScreen->h, mScreen->format->BitsPerPixel,
+diff --git a/src/main.cpp b/src/main.cpp
+index 232e78a..1427cd7 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -35,6 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #include "Blood.h"
+ 
+ #include <cstring>
++#include <cstdio>
+ #include <sstream>
+ 
+ #if defined(WIN32)
+@@ -150,6 +151,23 @@ void setupPHYSFS()
+ extern "C"
+ int main(int argc, char* argv[])
+ {
++#if defined(__amigaos__)
++    // AmigaOS: -fps logs each second's frame rate (and the screen the
++    // game got) to standard output, for measuring; upstream shows the
++    // rate only in the window's title
++    bool logFPS = false;
++    for (int i = 1; i < argc; ++i)
++    {
++        if (strcmp(argv[i], "-fps") == 0)
++        {
++            logFPS = true;
++            for (int j = i; j + 1 < argc; ++j)
++                argv[j] = argv[j + 1];
++            --argc;
++            --i;
++        }
++    }
++#endif
+     PHYSFS_init(argv[0]);
+     setupPHYSFS();
+     
+@@ -230,6 +248,11 @@ int main(int argc, char* argv[])
+         }
+ 
+         int running = 1;
++#if defined(__amigaos__)
++        Uint32 fpsStart = SDL_GetTicks();
++        Uint32 fpsSecond = fpsStart;
++        int fpsFrames = 0;
++#endif
+         while (running)
+         {
+             inputmgr->updateInput();
+@@ -267,6 +290,22 @@ int main(int argc, char* argv[])
+                 rmanager->refresh();
+             }
+             scontroller.update();
++#if defined(__amigaos__)
++            if (logFPS)
++            {
++                ++fpsFrames;
++                Uint32 now = SDL_GetTicks();
++                if (now - fpsSecond >= 1000)
++                {
++                    printf("fps %.1f at %.3f s\n",
++                        fpsFrames * 1000.0 / (now - fpsSecond),
++                        (now - fpsStart) / 1000.0);
++                    fflush(stdout);
++                    fpsSecond = now;
++                    fpsFrames = 0;
++                }
++            }
++#endif
+         }
+     }
+     catch (std::exception& e)

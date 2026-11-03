@@ -1,0 +1,10 @@
+{
+  "upstream_commit": "0e998a1f0307e80a7efb088f4c2164a2cd60341c",
+  "repository_commit": "4110cfdcdd31d08fcf1827776bc9959f4ae6977e",
+  "files": 165,
+  "sha256sums_sha256": "c65c6ffe994e019512e62046ef24e74cde91fa3d1f669213cb5cc170e7195aff",
+  "archive_sha256": "11c77827be8e1b620caccbadc714f615d6b6bcddb42ea1c597dfc1eaefcea38b",
+  "archive_bytes": 2539520,
+  "untar_sha256": "2de6090b9ef982dd1137e2e596da348fde51d09bf76b9ef11c604bbac86c7b6d",
+  "licence": "GPL-2.0-or-later (upstream COPYING); the Blobby Volley 2 team (AUTHORS)"
+}

@@ -1,0 +1,81 @@
+Blobby Volley 2 @VERSION@ for AmigaOS 3.x (AmiCradle)
+==========================================================
+
+Blobby Volley 2 is volleyball for two: two blobs, a net and a beach ball.
+Play a friend on one keyboard or one of the six bots. The first to 15
+points wins, and only the serving side scores. This is its AmigaOS 3.x
+build for a 68040 or 68060 with an FPU, with SDL 2 through GFOpenGPU.
+The game's graphics, sounds and bots are in the drawer: it plays as it
+comes.
+
+Requirements
+------------
+
+- AmigaOS 3.2, a 68040 or 68060 with an FPU (not an LC040 or EC040),
+  AmiCradle or an RTG board with an 800x600 screen mode.
+- GFOpenGPU with SDL2.module and SDL2_mixer.module in LIBS:GFOpenGPU/
+  (from gfopenrtg's main of 2 November 2026 or later).
+- AHI for sound (OpenAHI's driver on AmiCradle).
+
+Installing
+----------
+
+Unpack the archive where you keep games (lha x blobbyvolley2-...lha
+Games:, or OpenCompress x on AmiCradle) and open the BlobbyVolley2 drawer.
+The game writes only in the User drawer it makes beside itself (its
+settings and saved replays).
+
+If opening the game's icon seems to do nothing, SDL2.module or
+SDL2_mixer.module is missing from LIBS:GFOpenGPU/ (an older AmiCradle
+may have them only in LIBS:OpenGPU/: copy them across). Started from a
+Shell, the game says which one it needs.
+
+Playing
+-------
+
+- The game's icon opens an 800x600 screen of its own. Options, Graphic
+  Options, Window Mode puts it in a window on the Workbench instead.
+- Start plays a match with the players set in Options: on the left a
+  person, on the right a person or a bot (Union, Axji, Com 11,
+  Gintonic, Hyp014, Reduced), each bot at the strength chosen there.
+- Watch Replay plays a replay saved from a match (Escape, Save Replay).
+- From a Shell: cd to the drawer, then blobby. blobby NAME BOT.lua (or
+  two names) starts a match at once and quits when it ends. -fps writes
+  the frame rate each second.
+
+Controls
+--------
+
+Keyboard (upstream's defaults): the left player moves with A and D and
+jumps with W; the right player moves with the cursor keys and jumps with
+Up. Escape pauses a match (Yes quits it). In the menus, the mouse, or the
+cursor keys and Return.
+
+Options, Input Options sets a keyboard, the mouse or a joystick for each
+player. Joystick for the left player is the stick or CD32 pad in port 2
+(left and right to move, fire to jump); for the right player a stick in
+port 1. A CD32 pad's Play is Escape. Stick and pad play has not been
+tried on real hardware yet.
+
+About this build
+----------------
+
+Blobby Volley 2 0.9c, upstream commit
+@UPSTREAM@,
+as imported in DalsinAI/amigablobbyvolley2, built at
+@SOURCE@
+with @COMPILER@. Network and online play are not built. The
+game's data (@DATA_FILES@ files) is upstream's own.
+
+The SHA-256 of blobby:
+@EXE_SHA256@
+
+Licence
+-------
+
+Blobby Volley 2 is free software under the GNU General Public License,
+version 2 or later (COPYING): code by Jonathan Sieber, Daniel Knobe,
+Sven Rech and contributors, graphics by Silvio Mummert, the beach image
+by Richard Bertrand. Lua 5.1 (MIT) and TinyXML (zlib) are built in. The
+source of this build and of the port is at
+https://github.com/DalsinAI/amigablobbyvolley2.

@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "ports": {
+    "blobbyvolley2": {
+      "title": "Blobby Volley 2",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/angelonuffer/blobby-volley-2.git",
+        "commit": "0e998a1f0307e80a7efb088f4c2164a2cd60341c",
+        "submodules": false,
+        "imported": "Upstream tree imported into this repository at 6f66ea2 (Blobby Volley 2 0.9c, the SourceForge project's code as mirrored on GitHub); build-amiga.sh builds it as imported, with patches/ applied to a copy"
+      },
+      "contentPolicy": "GPL-2.0-or-later engine and game data (Jonathan Sieber, Daniel Knobe, Sven Rech and contributors; graphics by Silvio Mummert, beach image by Richard Bertrand; COPYING, AUTHORS); Lua 5.1 MIT and TinyXML zlib, bundled in src/; RakNet (BSD-3-Clause) is not built. The data ships in the upstream repository and is packaged beside the program.",
+      "runtimeData": {
+        "mode": "bundled",
+        "dirs": ["data/gfx", "data/sounds", "data/scripts", "data/backgrounds"],
+        "files": ["data/config.xml", "data/inputconfig.xml", "data/lang_de.xml", "data/lang_en.xml", "data/lang_fr.xml", "data/rules.lua", "data/Icon.bmp"],
+        "excluded": ["data/gf2x (old graphics the game does not load)", "data/scripts/old (old bots upstream does not install)", "data/server.xml and data/onlineserver.xml (network play is not built)"]
+      },
+      "user": "PROGDIR:User",
+      "package": {"archive": "blobbyvolley2-0.9c-amigaos3-test1-68040.lha", "bytes": 1827608, "sha256": "44cd097a5aaf0bee676c6fafc332799ad5b221523b7b1c63f0407e3576ee96e0", "job": "j20261103T035627-058ea7", "drawer": "BlobbyVolley2"}
+    }
+  }
+}
