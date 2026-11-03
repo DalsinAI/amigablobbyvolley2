@@ -125,6 +125,25 @@ whose names all start with `data/`, with `untar`, a small Amiga unpacker
 (older bots upstream does not install) and `data/server.xml` and
 `data/onlineserver.xml` (network play is not built).
 
+## Installing
+
+The package is one LhA archive,
+`blobbyvolley2-0.9c-amigaos3-test1-68040.lha` (Cradle's `stove_build`, target
+`package`: `package/build-amiga.sh`, then `tools/make_package.py`). Unpack it
+where games go (`lha x blobbyvolley2-...lha Games:`, or `OpenCompress x` on
+AmiCradle): it makes the `BlobbyVolley2` drawer with `BlobbyVolley2.info`
+beside it, and in it `blobby`, `ReadMe`, `COPYING`, their icons and the
+`data` drawer (the game's 165 data files, no icon). The game starts from its
+icon; the drawer, the game and the ReadMe have GlowIcons drawn from the
+game's own window icon (`icons/icons.json`, made with amicradle
+`scripts/port_icons.py`). It needs GFOpenGPU's `SDL2.module` and
+`SDL2_mixer.module` in `LIBS:GFOpenGPU/`, AHI, and a 68040 or 68060 with its
+FPU.
+
+From a build instead: make a drawer, put `blobby` (from the program's
+build), `blobby-data.tar` and `untar` (from `runtime-data`) in it, and in a
+Shell there `untar blobby-data.tar <drawer>`.
+
 ## Running
 
 `blobby` opens an 800x600 screen of its own, the game's own frame, unscaled
@@ -169,7 +188,7 @@ game; the build scripts are MIT.
 
 ## Status
 
-**In progress**, not RELEASE (see the release gates in amicradle
+**TESTING**, not RELEASE (see the release gates in amicradle
 `docs/porting/MEASUREMENT.md`).
 
 | Gate | State |
@@ -180,7 +199,7 @@ game; the build scripts are MIT.
 | Joystick / pad | not tested: no stick in the lab (SDL lists port 2) |
 | Sound | AHI through SDL2_mixer at 44.1 kHz, no late buffers; not heard (muted lab) |
 | Settings and replays across a restart | done (cold restart) |
-| Drawer with GlowIcons, start from Workbench, LhA package | not yet |
+| Drawer with GlowIcons, start from Workbench, LhA package | done (installed from the LhA alone on a fresh lab, played, saved, cold restart, loaded) |
 | Network play | not built |
 
 ## Observed
@@ -371,3 +390,74 @@ executable `6073e102...7aa5`) in `lab:blobby`.
 
 Not covered: a full disk or a write-protected drawer, and the replay name,
 which upstream offers to edit and was left as the number it suggests.
+
+### Package: the drawer, GlowIcons, the start from Workbench and the LhA play test, 3 November 2026
+
+Commit `165e9a2` adds the package:
+
+- `patches/0009-amiga-workbench.patch`: started from its icon, libnix gives
+  the program no arguments (argc 0), so it starts as with no options from a
+  Shell, and its log and SDL's go to `NIL:`, so no console window opens
+  beside the game.
+- `icons/`: GlowIcons for the drawer, the game, the ReadMe and COPYING,
+  made by amicradle `scripts/port_icons.py` from `icons/icons.json`, with
+  the game's own window icon (`data/Icon.bmp`, its black corners made
+  see-through, `icons/art/blobby.png`) as the art.
+- `package/`: `build-amiga.sh` (Cradle's target `package`), `ReadMe.in`
+  and `VERSION` (`0.9c-amigaos3-test1`, not a release name);
+  `tools/make_package.py` and `tools/lha_archive.py` (copied from amicradle
+  `scripts/lha_archive.py` at `30c127c`), as amigachocolatedoom makes its
+  archive.
+
+Cradle job `j20261103T035627-058ea7` (open5) built the program (SHA-256
+`77b583e54ead0d465df8b8de1162693cb5c13b39ebcc61653631937a9ac61e6b`,
+2,130,028 bytes; `receipts/6-package-open5-stove_build.json`), packed the
+data (`receipts/6-data.json`) and made
+**`blobbyvolley2-0.9c-amigaos3-test1-68040.lha`, 1,827,608 bytes, SHA-256
+`44cd097a5aaf0bee676c6fafc332799ad5b221523b7b1c63f0407e3576ee96e0`**:
+172 members (the drawer's icon, six files with their icons, 165 data
+files), read back member for member before it is written out.
+
+The play test, in `lab:blobby-pkg`, a new copy of Instance-32 (AC090 JIT,
+68040 + FPU, RTG 1920x1080, AHI, muted), with nothing of the game on it:
+
+- **Only the archive in.** The agent was installed and the archive put in
+  `SYS:T/`. Instance-32 has `SDL2.module` and `SDL2_mixer.module` only in
+  `LIBS:OpenGPU/`, older ones; gfopenrtg's (`0c0bfee8...08b2` and
+  `07410c8b...314d`, from `210df77`, as for every run here) were put in
+  `LIBS:OpenGPU/` and copied to a new `LIBS:GFOpenGPU/`, as the brief asks.
+- `SYS:Utilities/OpenCompress` 0.3.2, the instance's own unpacker:
+  `t` gave "172 files tested, 4585797 bytes, all good"; `x ...
+  Work:Games` unpacked them, and the unpacked `blobby` has the package's
+  SHA-256.
+- **The icon start.** In OpenBench: Work, then Games (the BlobbyVolley2
+  drawer with its GlowIcon), then BlobbyVolley2 (the game, COPYING and
+  ReadMe with theirs), each opened by selecting it and Right-Amiga O. The
+  game's icon, selected and opened the same way, gave the title and menu on
+  the game's own 800x600 screen, with no console window; `PROGDIR:User`
+  was made.
+- **Play.** Start, two players on the keyboard (A, D, W and the cursor
+  keys): rallies, the right player scored (0:1).
+- **Save.** Escape, Save Replay, OK (`1793675024`), Yes; then Options,
+  Misc Options, the stadium background, OK; Exit, back to the Workbench.
+  `PROGDIR:User` held `config.xml` (1,398 bytes, SHA-256
+  `2c635860...b80a`, `background` `strand1.bmp`) and
+  `replays/1793675024.bvr` (12,320 bytes, `74d614b0...c296`).
+- **Cold restart and load.** The lab was stopped and started again. Both
+  files were there with the same sizes, times and (for `config.xml`)
+  SHA-256. The game, opened from its icon again, came up on the stadium;
+  Watch Replay listed `1793675024`, and it played back the same match: the
+  same serve and rallies, the right player's point, 0:1, the ball resting
+  where it had. Escape, Cancel, Exit: back to the Workbench.
+
+![The Games drawer: BlobbyVolley2 with its GlowIcon](docs/observed/step6-wb-games-selected.png)
+![The BlobbyVolley2 drawer, the game's icon chosen](docs/observed/step6-wb-drawer-selected.png)
+![The drawer on the Workbench](docs/observed/step6-wb-drawer.png)
+![The menu, after the start from the icon](docs/observed/step6-menu-after-icon.png)
+![Play, from the icon](docs/observed/step6-play-from-icon.png)
+![After the cold restart: the saved setting](docs/observed/step6-after-restart-menu.png)
+![After the cold restart: the saved replay playing](docs/observed/step6-replay-after-restart.png)
+
+Not covered here: sound heard (the lab is muted; step 4 measured AHI being
+fed), a stick or pad (step 3), and an Amiga without RTG (the game needs an
+800x600 screen).
