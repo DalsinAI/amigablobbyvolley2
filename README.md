@@ -179,7 +179,7 @@ game; the build scripts are MIT.
 | Keyboard play | done (a match against a bot, two players, the menus) |
 | Joystick / pad | not tested: no stick in the lab (SDL lists port 2) |
 | Sound | AHI through SDL2_mixer at 44.1 kHz, no late buffers; not heard (muted lab) |
-| Settings and replays across a restart | not yet |
+| Settings and replays across a restart | done (cold restart) |
 | Drawer with GlowIcons, start from Workbench, LhA package | not yet |
 | Network play | not built |
 
@@ -337,3 +337,37 @@ started, which is what a muted lab can show. That it sounds right is still
 to be heard on a real instance.
 
 ![Play with sound](docs/observed/step4-play-sound.png)
+
+### Saves: settings and replays, 3 November 2026
+
+Blobby Volley 2 keeps its settings (`config.xml`, and `inputconfig.xml`
+once Input Options has been used) and the replays a player saves
+(`replays/NAME.bvr`) in its write directory, which the port makes
+`PROGDIR:User` (`patches/0004`); nothing else is written. No change was
+needed for this step: the run below is step 4's build (`e4a2ad4`,
+executable `6073e102...7aa5`) in `lab:blobby`.
+
+- Options, Misc Options: the background from the beach (`strand2.bmp`) to
+  the stadium (`strand1.bmp`), Show Blood on, the volume to about half;
+  Graphic Options: Show Shadow Yes; OK. A game against the bot, Escape,
+  Save Replay, OK, Yes, Exit.
+- `PROGDIR:User` then held `config.xml` (1,380 bytes, SHA-256
+  `bed838e5...4974`, with `show_shadow` `true`, `blood` `true`,
+  `background` `strand1.bmp`, `global_volume` `0.515000`) and two
+  replays: `1793673592.bvr` (4,688 bytes, `b2255b11...f2a9`, saved in the
+  step 3 run) and `1793674230.bvr` (2,847 bytes, `9d904423...9a2d`).
+- **Across a restart:** the lab was stopped and started again (Cradle's
+  `lab stop` and `lab start`, a cold boot). The files were there with the
+  same sizes and times, and `config.xml` and `1793674230.bvr` the same
+  SHA-256. The game opened on the stadium from its first frame; Watch
+  Replay listed both replays, and `1793674230` played: Ami against
+  Reduced, with shadows and blood, the sounds started as in play (4 to 6
+  every five seconds). Escape and Exit ended it cleanly.
+
+![Misc Options before the restart](docs/observed/step5-misc-options.png)
+![Shadows and blood, before the restart](docs/observed/step5-before-restart.png)
+![After the cold restart: both replays listed](docs/observed/step5-replays-after-restart.png)
+![After the cold restart: the replay playing](docs/observed/step5-replay-after-restart.png)
+
+Not covered: a full disk or a write-protected drawer, and the replay name,
+which upstream offers to edit and was left as the number it suggests.
