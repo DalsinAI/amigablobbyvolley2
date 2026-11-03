@@ -140,3 +140,31 @@ game; the build scripts are MIT.
 | Settings and replays across a restart | not yet |
 | Drawer with GlowIcons, start from Workbench, LhA package | not yet |
 | Network play | not built |
+
+## Observed
+
+### Build, 3 November 2026
+
+Commit `58dec50`: clean compile and link of the imported source with
+`patches/0001` to `0005`, no network code (`receipts/`). Two Cradle builds
+gave the same executable and the same receipt. The compiler's warnings are
+upstream's own (catching exceptions by value, an unhandled enumeration
+value, a comparison of two arrays in `RenderManagerSDL::drawBlob`, one in
+Lua's `ldump.c`), none in the patches.
+
+| Compiler | Executable SHA-256 | Bytes |
+|---|---|---|
+| GFOpenAmigaGCC 16.2.0-open5 (Cradle `stove_build`, jobs `j20261103T025001-db880e` and `j20261103T025154-9a8613`) | `29b2137e74560761ab70fae49144d9b2cbe018261abae69277930d7167cac0c8` | 2,114,288 |
+
+Game data (job `j20261103T025109-1f031a`): 165 files, `SHA256SUMS` digest
+`517c2b35...9395` (the same from a local open3 run of the same commit's
+data), archive `b6dbcf1e...15f8`, `untar` `2de6090b...b6d` (the same bytes
+as amigakobodeluxe's). Lab tools (`tests/lab`, job
+`j20261103T025132-d77fcb`): HoldKeys `dde62ad3...b0af`, JoyPort
+`a7100d5b...7413`, Chop `d4f9b0fc...1199`.
+
+A first start, to see that the build runs (not a gate of this step): in
+`lab:blobby`, a copy of Instance-32, `blobby` from a Shell in a drawer with
+the data unpacked beside it opened upstream's default 800x600 window on the
+Workbench with the main menu, the title bar reading `FPS: 75` (upstream's
+`gamefps`), and made `PROGDIR:User`.
