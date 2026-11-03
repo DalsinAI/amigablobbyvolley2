@@ -1,0 +1,37 @@
+diff --git a/src/main.cpp b/src/main.cpp
+index c6fec1a..311ac75 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -148,10 +148,32 @@ void setupPHYSFS()
+ #endif
+ }
+ #undef main
++#if defined(__amigaos__)
++// SDL's own log lines, to the game's standard error (NIL: from Workbench)
++static void SDLCALL sdlLogToStderr(void*, int, SDL_LogPriority, const char* message)
++{
++    fprintf(stderr, "%s\n", message);
++}
++#endif
++
+ extern "C"
+ int main(int argc, char* argv[])
+ {
+ #if defined(__amigaos__)
++    // AmigaOS, started from its Workbench icon: libnix gives argc 0 and
++    // the WBStartup message in argv, so no program name and no options;
++    // the game then starts as with no options from a Shell (its data and
++    // PROGDIR:User beside the program). Its log and SDL's go to NIL:, so
++    // no console window opens beside the game for them.
++    static char* wbArgv[] = { (char*)"blobby", NULL };
++    if (argc < 1)
++    {
++        argc = 1;
++        argv = wbArgv;
++        freopen("NIL:", "w", stdout);
++        freopen("NIL:", "w", stderr);
++        SDL_LogSetOutputFunction(sdlLogToStderr, NULL);
++    }
+     // AmigaOS: -fps logs each second's frame rate (and the screen the
+     // game got) to standard output, for measuring; upstream shows the
+     // rate only in the window's title
