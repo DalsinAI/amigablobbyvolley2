@@ -133,6 +133,20 @@ second (`gamefps` in the settings); upstream's frame dropping is never
 switched on, so when the machine cannot draw 75 frames a second the game
 itself runs slower, and the logged rate is the game's speed as well.
 
+Controls are upstream's: the left player A and D to move and W to jump,
+the right player the cursor keys and Up to jump; the mouse or the cursor
+keys and Return in the menus; Escape pauses a game (Yes, No, Save Replay).
+Options, Input Options sets a keyboard, the mouse or a joystick for each
+player. On AmigaOS the joystick settings start from an Amiga stick: the
+left player's from the stick or pad in port 2 (left and right, fire to
+jump), the right player's from a stick in port 1 (SDL lists it when
+lowlevel.library sees one there). A CD32 pad's Play, or a GFOpenInput pad's
+Start, is Escape. The log names each stick SDL finds, and `SetEnv
+BLOBBY_INPUT RAM:input.txt` logs every key, mouse button, joystick and pad
+event the game takes, with its time. `blobby NAME BOT.lua` (or two names)
+starts a game at once and quits when it ends, as upstream does; it also
+saves those players in the settings.
+
 ## Rights
 
 Code and data: GPL-2.0-or-later, upstream's `COPYING` (the source files say
@@ -152,8 +166,8 @@ game; the build scripts are MIT.
 |---|---|
 | Pinned source, reproducible build, receipts | done (open5, Cradle) |
 | Launch to the menu, 800x600 on a screen of its own | done (75 frames a second; a window on the Workbench from Options) |
-| Keyboard play | not yet |
-| Joystick / pad | not yet |
+| Keyboard play | done (a match against a bot, two players, the menus) |
+| Joystick / pad | not tested: no stick in the lab (SDL lists port 2) |
 | Sound | not yet |
 | Settings and replays across a restart | not yet |
 | Drawer with GlowIcons, start from Workbench, LhA package | not yet |
@@ -231,3 +245,52 @@ held 75 a few minutes before.
 ![The main menu on its own 800x600 screen](docs/observed/step2-menu-800x600.png)
 ![Graphic Options: full screen or window, the blob colours](docs/observed/step2-graphic-options.png)
 ![In a window on the Workbench](docs/observed/step2-window-on-workbench.png)
+
+### Controls, 3 November 2026
+
+Commit `8c1fcd8` adds `patches/0007-amiga-input.patch`: the joystick
+settings in `data/inputconfig.xml` start from Amiga sticks (upstream's
+jumped on the left stick pulled down and moved the right player with
+buttons 0 and 1), a CD32 pad's Play or a GFOpenInput pad's Start is Escape,
+the sticks SDL finds are named in the log, and `SetEnv BLOBBY_INPUT
+RAM:input.txt` logs every key, mouse button, joystick and pad event with
+its time. Executable (open5, Cradle job `j20261103T033354-cfff1a`): SHA-256
+`e9c863ffeedd79a9c0731276e75c752175180da5127f4a4baca5f9e8c1d8ec97`
+(2,116,700 bytes; `receipts/3-input-open5-stove_build.json`); data job
+`j20261103T033437-3c50a9` (`receipts/3-data.json`).
+
+In `lab:blobby` as for the presentation, the new data unpacked over the old:
+
+- The log has `Joystick 0: "Amiga joystick port (2): joystick", 6 axes, 21
+  buttons`. JoyPort, at the same time, reports lowlevel.library's port 1
+  (game port 2) as `none` and port 0 as `unknown`: there is no stick in the
+  lab, and SDL lists port 2 anyway, as gfopenrtg's driver always does.
+- `blobby -fps Ami reduced.lua` started a match against the Reduced bot.
+  `HoldKeys 60 HOLD 11 CYCLE 20,22 PERIOD 40` held W (jump) and A and D in
+  turn, about 1.45 s each: the blue blob ran and jumped the whole time,
+  every press and release is in the input log, and the bot won 15 to 0 in
+  78 seconds (`Winner: 1`), after which the game quit, as upstream does with
+  players named on the command line.
+- `blobby -fps Ami Bo`, two players on one keyboard: `HoldKeys 30 HOLD
+  11,4C CYCLE 20,4F,22,4E PERIOD 40` held both jump keys (W, Up) and A,
+  Left, D, Right in turn; both blobs ran and jumped and the score moved
+  both ways.
+- Escape paused the game (Really quit? Yes, No, Save Replay); Down and
+  Return chose in that box, Save Replay with OK wrote
+  `PROGDIR:User/replays/1793673592.bvr` (4,688 bytes); Yes went back to the
+  main menu, and Up, Return there chose Exit. Escape again while paused
+  does nothing, as upstream.
+- Frames in play: **75.0 a second** (73.4 to 75.2 in every one-second
+  reading of both runs), the game's own speed.
+
+The first run's HoldKeys outlived its match (it counts its time in
+`Delay(1)` ticks, slower than real time here) and its last three presses
+are at the start of the second run's input log, before the menu took them.
+
+![Against the Reduced bot](docs/observed/step3-play-against-bot.png)
+![Two players on one keyboard](docs/observed/step3-two-players.png)
+![Escape pauses](docs/observed/step3-pause.png)
+
+Joystick and CD32 pad: not qualified. No stick or pad event could be made
+here; a person with a stick in port 2 (or a CD32 pad) has to choose
+Joystick for the left player in Options, Input Options, and play.
