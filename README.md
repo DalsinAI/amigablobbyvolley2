@@ -45,9 +45,10 @@ The choice, 3 November 2026:
   which holds only on a little-endian machine: those surfaces now have their
   masks set so the bytes are R, G, B on either byte order (the 68040 is
   big-endian). The OpenGL and GP2X renderers are not built, and the Graphics
-  options offer SDL only. Upstream's audio callback stays for now (SDL 2
-  keeps `SDL_OpenAudio`); its mute switch unlocked SDL's audio lock without
-  having locked it, which SDL 2's mutex does not allow, and no longer does.
+  options offer SDL only. Upstream's own mixer on SDL's audio callback is
+  replaced by SDL2_mixer in `patches/0008` (below); in 0001 its mute switch
+  no longer unlocks SDL's audio lock without having locked it, which SDL 2's
+  mutex does not allow.
 - `patches/0002-no-boost.patch`: the four Boost pieces the game itself uses,
   as a few lines of standard C++ each (a CRC-32 that gives the same value as
   `boost::crc_32_type`, so replays keep their checksum; a fixed-size ring for
@@ -73,9 +74,18 @@ The choice, 3 November 2026:
 What could stop it, and the stop rule: every frame is drawn by the CPU into
 the window surface at 800x600, and in the menus the whole background is
 drawn again each frame. If play cannot hold the game's own speed (75 steps a
-second, `gamefps` in the settings; the game drops frames to keep the speed),
-that is reported, not hidden. GFOpenMulticore has nothing to take here: one
+second, `gamefps` in the settings; every step is drawn, so a slow frame
+slows the game itself), that is reported, not hidden. GFOpenMulticore has nothing to take here: one
 serial game loop.
+
+- `patches/0008-sdl2-mixer.patch`: the sounds are played by SDL2_mixer
+  (GFOpenGPU's `SDL2_mixer.module`, AHI underneath) instead of upstream's
+  own mixing in SDL's audio callback: the same format (44.1 kHz, 16 bits,
+  stereo, 1,024-sample buffers), each sound loaded once from the data and
+  played on a free channel at its volume times the global volume; mute stops
+  what plays and starts nothing new. With `-fps` the log gives, every five
+  seconds, the mixer's buffers, how many came more than half a buffer late,
+  the longest gap between two, and the sounds started.
 
 ## Building
 
@@ -115,6 +125,57 @@ whose names all start with `data/`, with `untar`, a small Amiga unpacker
 (older bots upstream does not install) and `data/server.xml` and
 `data/onlineserver.xml` (network play is not built).
 
+## Installing
+
+The package is one LhA archive,
+`blobbyvolley2-0.9c-amigaos3-test1-68040.lha` (Cradle's `stove_build`, target
+`package`: `package/build-amiga.sh`, then `tools/make_package.py`). Unpack it
+where games go (`lha x blobbyvolley2-...lha Games:`, or `OpenCompress x` on
+AmiCradle): it makes the `BlobbyVolley2` drawer with `BlobbyVolley2.info`
+beside it, and in it `blobby`, `ReadMe`, `COPYING`, their icons and the
+`data` drawer (the game's 165 data files, no icon). The game starts from its
+icon; the drawer, the game and the ReadMe have GlowIcons drawn from the
+game's own window icon (`icons/icons.json`, made with amicradle
+`scripts/port_icons.py`). It needs GFOpenGPU's `SDL2.module` and
+`SDL2_mixer.module` in `LIBS:GFOpenGPU/`, AHI, and a 68040 or 68060 with its
+FPU.
+
+From a build instead: make a drawer, put `blobby` (from the program's
+build), `blobby-data.tar` and `untar` (from `runtime-data`) in it, and in a
+Shell there `untar blobby-data.tar <drawer>`.
+
+## Running
+
+`blobby` opens an 800x600 screen of its own, the game's own frame, unscaled
+(SDL's real full screen; upstream's default is an 800x600 window, and the
+port changes only the default in `data/config.xml`). Options, Graphic
+Options, Window Mode, OK switches to a window on the Workbench at once and
+keeps it (`PROGDIR:User/config.xml`); Fullscreen Mode switches back. It
+needs GFOpenGPU's `SDL2.module` and `SDL2_mixer.module` in
+`LIBS:GFOpenGPU/` (older systems have them in `LIBS:OpenGPU/`), and a 68040
+or 68060 with its FPU.
+
+`-fps` logs the screen the game got and each second's frame rate to
+standard output (`fps 75.0 at 12.012 s`); upstream shows the rate only in
+the window's title. The game draws every step of its logic, at most 75 a
+second (`gamefps` in the settings); upstream's frame dropping is never
+switched on, so when the machine cannot draw 75 frames a second the game
+itself runs slower, and the logged rate is the game's speed as well.
+
+Controls are upstream's: the left player A and D to move and W to jump,
+the right player the cursor keys and Up to jump; the mouse or the cursor
+keys and Return in the menus; Escape pauses a game (Yes, No, Save Replay).
+Options, Input Options sets a keyboard, the mouse or a joystick for each
+player. On AmigaOS the joystick settings start from an Amiga stick: the
+left player's from the stick or pad in port 2 (left and right, fire to
+jump), the right player's from a stick in port 1 (SDL lists it when
+lowlevel.library sees one there). A CD32 pad's Play, or a GFOpenInput pad's
+Start, is Escape. The log names each stick SDL finds, and `SetEnv
+BLOBBY_INPUT RAM:input.txt` logs every key, mouse button, joystick and pad
+event the game takes, with its time. `blobby NAME BOT.lua` (or two names)
+starts a game at once and quits when it ends, as upstream does; it also
+saves those players in the settings.
+
 ## Rights
 
 Code and data: GPL-2.0-or-later, upstream's `COPYING` (the source files say
@@ -127,18 +188,18 @@ game; the build scripts are MIT.
 
 ## Status
 
-**In progress**, not RELEASE (see the release gates in amicradle
+**TESTING**, not RELEASE (see the release gates in amicradle
 `docs/porting/MEASUREMENT.md`).
 
 | Gate | State |
 |---|---|
 | Pinned source, reproducible build, receipts | done (open5, Cradle) |
-| Launch to the menu, 800x600 on a screen of its own | not yet |
-| Keyboard play | not yet |
-| Joystick / pad | not yet |
-| Sound | not yet |
-| Settings and replays across a restart | not yet |
-| Drawer with GlowIcons, start from Workbench, LhA package | not yet |
+| Launch to the menu, 800x600 on a screen of its own | done (75 frames a second; a window on the Workbench from Options) |
+| Keyboard play | done (a match against a bot, two players, the menus) |
+| Joystick / pad | not tested: no stick in the lab (SDL lists port 2) |
+| Sound | AHI through SDL2_mixer at 44.1 kHz, no late buffers; not heard (muted lab) |
+| Settings and replays across a restart | done (cold restart) |
+| Drawer with GlowIcons, start from Workbench, LhA package | done (installed from the LhA alone on a fresh lab, played, saved, cold restart, loaded) |
 | Network play | not built |
 
 ## Observed
@@ -168,3 +229,235 @@ A first start, to see that the build runs (not a gate of this step): in
 the data unpacked beside it opened upstream's default 800x600 window on the
 Workbench with the main menu, the title bar reading `FPS: 75` (upstream's
 `gamefps`), and made `PROGDIR:User`.
+
+### Presentation, 3 November 2026
+
+Commit `4110cfd` adds `patches/0006-amiga-presentation.patch`: the
+default in `data/config.xml` is full screen (upstream's is a window), and
+on AmigaOS the game logs the screen it got and, with `-fps`, each second's
+frame rate. `runtime-data/build-amiga.sh` now packs the data from a patched
+copy, since the patches touch the settings' defaults. Executable (open5,
+Cradle job `j20261103T032131-ea4501`): SHA-256
+`22114182990d931c7ae9da7436f86d0df0e95d04220932fd85c79b012bf0d71a`
+(2,115,104 bytes; `receipts/2-presentation-open5-stove_build.json`). Game
+data (job `j20261103T032351-579a8d`, `receipts/2-data.json`): 165 files,
+archive `11c77827...a38b`.
+
+Run in `lab:blobby`, a copy of Instance-32 (AC090 JIT, 68040 + FPU, RTG
+1920x1080, AHI, muted), with gfopenrtg's SDL2.module (`0c0bfee8...08b2`)
+and SDL2_mixer.module (`07410c8b...314d`), as built from gfopenrtg
+`210df77`, in both `LIBS:OpenGPU/` and `LIBS:GFOpenGPU/`; the game in
+`Work:Games/BlobbyVolley2` with its data unpacked by `untar`, and no
+`PROGDIR:User` before the first start.
+
+- `blobby -fps`: the RTG head switched to 800x600 and the main menu filled
+  it, frame whole (log: `window surface in video RAM (800x600, 3200 bytes a
+  row)`, `screen 800x600, SDL_PIXELFORMAT_ARGB8888, 3200 bytes a row`).
+  `PROGDIR:User` and `PROGDIR:User/replays` were made.
+- Frames on the main menu: **75.0 a second** (74.9 to 75.1 in 49 one-second
+  readings after the first, 67.3), the game's own `gamefps`.
+- The blobs are blue and red in Graphic Options, as upstream's settings
+  say: the colour fix for the big-endian 68040 holds.
+- Options, Graphic Options, Window Mode, OK: the game moved to an 800x600
+  window on the Workbench at once (`window 800x600, ...` in the log), 75
+  frames a second on its main menu, 58.6 to 65.8 on the options screens.
+  Exit wrote `fullscreen` `false` in `PROGDIR:User/config.xml`; the next
+  start opened the window again. Fullscreen Mode, OK switched back to the
+  screen of its own and saved `true`.
+- Escape does nothing on the main menu (as upstream); Exit ends the game
+  cleanly and the Workbench comes back.
+
+The host was busy: in one later run the options screens fell to 14.5 to
+46.8 frames a second, window and screen alike, where the same screens had
+held 75 a few minutes before.
+
+![The main menu on its own 800x600 screen](docs/observed/step2-menu-800x600.png)
+![Graphic Options: full screen or window, the blob colours](docs/observed/step2-graphic-options.png)
+![In a window on the Workbench](docs/observed/step2-window-on-workbench.png)
+
+### Controls, 3 November 2026
+
+Commit `8c1fcd8` adds `patches/0007-amiga-input.patch`: the joystick
+settings in `data/inputconfig.xml` start from Amiga sticks (upstream's
+jumped on the left stick pulled down and moved the right player with
+buttons 0 and 1), a CD32 pad's Play or a GFOpenInput pad's Start is Escape,
+the sticks SDL finds are named in the log, and `SetEnv BLOBBY_INPUT
+RAM:input.txt` logs every key, mouse button, joystick and pad event with
+its time. Executable (open5, Cradle job `j20261103T033354-cfff1a`): SHA-256
+`e9c863ffeedd79a9c0731276e75c752175180da5127f4a4baca5f9e8c1d8ec97`
+(2,116,700 bytes; `receipts/3-input-open5-stove_build.json`); data job
+`j20261103T033437-3c50a9` (`receipts/3-data.json`).
+
+In `lab:blobby` as for the presentation, the new data unpacked over the old:
+
+- The log has `Joystick 0: "Amiga joystick port (2): joystick", 6 axes, 21
+  buttons`. JoyPort, at the same time, reports lowlevel.library's port 1
+  (game port 2) as `none` and port 0 as `unknown`: there is no stick in the
+  lab, and SDL lists port 2 anyway, as gfopenrtg's driver always does.
+- `blobby -fps Ami reduced.lua` started a match against the Reduced bot.
+  `HoldKeys 60 HOLD 11 CYCLE 20,22 PERIOD 40` held W (jump) and A and D in
+  turn, about 1.45 s each: the blue blob ran and jumped the whole time,
+  every press and release is in the input log, and the bot won 15 to 0 in
+  78 seconds (`Winner: 1`), after which the game quit, as upstream does with
+  players named on the command line.
+- `blobby -fps Ami Bo`, two players on one keyboard: `HoldKeys 30 HOLD
+  11,4C CYCLE 20,4F,22,4E PERIOD 40` held both jump keys (W, Up) and A,
+  Left, D, Right in turn; both blobs ran and jumped and the score moved
+  both ways.
+- Escape paused the game (Really quit? Yes, No, Save Replay); Down and
+  Return chose in that box, Save Replay with OK wrote
+  `PROGDIR:User/replays/1793673592.bvr` (4,688 bytes); Yes went back to the
+  main menu, and Up, Return there chose Exit. Escape again while paused
+  does nothing, as upstream.
+- Frames in play: **75.0 a second** (73.4 to 75.2 in every one-second
+  reading of both runs), the game's own speed.
+
+The first run's HoldKeys outlived its match (it counts its time in
+`Delay(1)` ticks, slower than real time here) and its last three presses
+are at the start of the second run's input log, before the menu took them.
+
+![Against the Reduced bot](docs/observed/step3-play-against-bot.png)
+![Two players on one keyboard](docs/observed/step3-two-players.png)
+![Escape pauses](docs/observed/step3-pause.png)
+
+Joystick and CD32 pad: not qualified. No stick or pad event could be made
+here; a person with a stick in port 2 (or a CD32 pad) has to choose
+Joystick for the left player in Options, Input Options, and play.
+
+### Sound, 3 November 2026
+
+Commit `e4a2ad4` adds `patches/0008-sdl2-mixer.patch` and links
+SDL2_mixer (`build-amiga.sh` checks the stove has `libSDL2_mixer.a` and its
+header, and the receipt names both). Executable (open5, Cradle job
+`j20261103T034436-8ab34b`): SHA-256
+`6073e10205ba1d5fef5f5aee0564d725b5167eefbc32bd17e4603cf3d6f47aa5`
+(2,129,788 bytes; `receipts/4-sound-open5-stove_build.json`). The data is
+step 3's. An earlier build of the same patch without the count of sounds
+started (`14b7c45`, job `j20261103T033621-d73fcd`) gave the same buffer
+readings over 85 seconds.
+
+In `lab:blobby`, with the settings as upstream has them (`global_volume`
+1.0, `mute` false), `blobby -fps Ami reduced.lua` and `HoldKeys 120 HOLD 11
+CYCLE 20,22 PERIOD 30`: a match against the bot, which won 15 to 0 in 93
+seconds.
+
+- `audio "ahi" through SDL2_mixer: 44100 Hz, 2 channels, 16 bits, 1024
+  samples a buffer`: AHI, 23.2 ms buffers.
+- **Buffers every five seconds: 215 to 217** in all 17 readings after the
+  first (224, with the start-up): 43.1 a second, as 44,100 / 1,024 gives.
+  **None late**; the longest gap between two buffers was 26 to 27 ms.
+- **75 sounds started** (the two silent ones at start-up among them): the
+  whistle at each fault and the thump of the ball on a blob, 3 to 6 every
+  five seconds; none failed to load.
+- Frames: 73.4 to 75.1 a second, as without sound. No freeze.
+
+Labs are muted: AHI was opened and fed at the full rate and the sounds were
+started, which is what a muted lab can show. That it sounds right is still
+to be heard on a real instance.
+
+![Play with sound](docs/observed/step4-play-sound.png)
+
+### Saves: settings and replays, 3 November 2026
+
+Blobby Volley 2 keeps its settings (`config.xml`, and `inputconfig.xml`
+once Input Options has been used) and the replays a player saves
+(`replays/NAME.bvr`) in its write directory, which the port makes
+`PROGDIR:User` (`patches/0004`); nothing else is written. No change was
+needed for this step: the run below is step 4's build (`e4a2ad4`,
+executable `6073e102...7aa5`) in `lab:blobby`.
+
+- Options, Misc Options: the background from the beach (`strand2.bmp`) to
+  the stadium (`strand1.bmp`), Show Blood on, the volume to about half;
+  Graphic Options: Show Shadow Yes; OK. A game against the bot, Escape,
+  Save Replay, OK, Yes, Exit.
+- `PROGDIR:User` then held `config.xml` (1,380 bytes, SHA-256
+  `bed838e5...4974`, with `show_shadow` `true`, `blood` `true`,
+  `background` `strand1.bmp`, `global_volume` `0.515000`) and two
+  replays: `1793673592.bvr` (4,688 bytes, `b2255b11...f2a9`, saved in the
+  step 3 run) and `1793674230.bvr` (2,847 bytes, `9d904423...9a2d`).
+- **Across a restart:** the lab was stopped and started again (Cradle's
+  `lab stop` and `lab start`, a cold boot). The files were there with the
+  same sizes and times, and `config.xml` and `1793674230.bvr` the same
+  SHA-256. The game opened on the stadium from its first frame; Watch
+  Replay listed both replays, and `1793674230` played: Ami against
+  Reduced, with shadows and blood, the sounds started as in play (4 to 6
+  every five seconds). Escape and Exit ended it cleanly.
+
+![Misc Options before the restart](docs/observed/step5-misc-options.png)
+![Shadows and blood, before the restart](docs/observed/step5-before-restart.png)
+![After the cold restart: both replays listed](docs/observed/step5-replays-after-restart.png)
+![After the cold restart: the replay playing](docs/observed/step5-replay-after-restart.png)
+
+Not covered: a full disk or a write-protected drawer, and the replay name,
+which upstream offers to edit and was left as the number it suggests.
+
+### Package: the drawer, GlowIcons, the start from Workbench and the LhA play test, 3 November 2026
+
+Commit `165e9a2` adds the package:
+
+- `patches/0009-amiga-workbench.patch`: started from its icon, libnix gives
+  the program no arguments (argc 0), so it starts as with no options from a
+  Shell, and its log and SDL's go to `NIL:`, so no console window opens
+  beside the game.
+- `icons/`: GlowIcons for the drawer, the game, the ReadMe and COPYING,
+  made by amicradle `scripts/port_icons.py` from `icons/icons.json`, with
+  the game's own window icon (`data/Icon.bmp`, its black corners made
+  see-through, `icons/art/blobby.png`) as the art.
+- `package/`: `build-amiga.sh` (Cradle's target `package`), `ReadMe.in`
+  and `VERSION` (`0.9c-amigaos3-test1`, not a release name);
+  `tools/make_package.py` and `tools/lha_archive.py` (copied from amicradle
+  `scripts/lha_archive.py` at `30c127c`), as amigachocolatedoom makes its
+  archive.
+
+Cradle job `j20261103T035627-058ea7` (open5) built the program (SHA-256
+`77b583e54ead0d465df8b8de1162693cb5c13b39ebcc61653631937a9ac61e6b`,
+2,130,028 bytes; `receipts/6-package-open5-stove_build.json`), packed the
+data (`receipts/6-data.json`) and made
+**`blobbyvolley2-0.9c-amigaos3-test1-68040.lha`, 1,827,608 bytes, SHA-256
+`44cd097a5aaf0bee676c6fafc332799ad5b221523b7b1c63f0407e3576ee96e0`**:
+172 members (the drawer's icon, six files with their icons, 165 data
+files), read back member for member before it is written out.
+
+The play test, in `lab:blobby-pkg`, a new copy of Instance-32 (AC090 JIT,
+68040 + FPU, RTG 1920x1080, AHI, muted), with nothing of the game on it:
+
+- **Only the archive in.** The agent was installed and the archive put in
+  `SYS:T/`. Instance-32 has `SDL2.module` and `SDL2_mixer.module` only in
+  `LIBS:OpenGPU/`, older ones; gfopenrtg's (`0c0bfee8...08b2` and
+  `07410c8b...314d`, from `210df77`, as for every run here) were put in
+  `LIBS:OpenGPU/` and copied to a new `LIBS:GFOpenGPU/`, as the brief asks.
+- `SYS:Utilities/OpenCompress` 0.3.2, the instance's own unpacker:
+  `t` gave "172 files tested, 4585797 bytes, all good"; `x ...
+  Work:Games` unpacked them, and the unpacked `blobby` has the package's
+  SHA-256.
+- **The icon start.** In OpenBench: Work, then Games (the BlobbyVolley2
+  drawer with its GlowIcon), then BlobbyVolley2 (the game, COPYING and
+  ReadMe with theirs), each opened by selecting it and Right-Amiga O. The
+  game's icon, selected and opened the same way, gave the title and menu on
+  the game's own 800x600 screen, with no console window; `PROGDIR:User`
+  was made.
+- **Play.** Start, two players on the keyboard (A, D, W and the cursor
+  keys): rallies, the right player scored (0:1).
+- **Save.** Escape, Save Replay, OK (`1793675024`), Yes; then Options,
+  Misc Options, the stadium background, OK; Exit, back to the Workbench.
+  `PROGDIR:User` held `config.xml` (1,398 bytes, SHA-256
+  `2c635860...b80a`, `background` `strand1.bmp`) and
+  `replays/1793675024.bvr` (12,320 bytes, `74d614b0...c296`).
+- **Cold restart and load.** The lab was stopped and started again. Both
+  files were there with the same sizes, times and (for `config.xml`)
+  SHA-256. The game, opened from its icon again, came up on the stadium;
+  Watch Replay listed `1793675024`, and it played back the same match: the
+  same serve and rallies, the right player's point, 0:1, the ball resting
+  where it had. Escape, Cancel, Exit: back to the Workbench.
+
+![The Games drawer: BlobbyVolley2 with its GlowIcon](docs/observed/step6-wb-games-selected.png)
+![The BlobbyVolley2 drawer, the game's icon chosen](docs/observed/step6-wb-drawer-selected.png)
+![The drawer on the Workbench](docs/observed/step6-wb-drawer.png)
+![The menu, after the start from the icon](docs/observed/step6-menu-after-icon.png)
+![Play, from the icon](docs/observed/step6-play-from-icon.png)
+![After the cold restart: the saved setting](docs/observed/step6-after-restart-menu.png)
+![After the cold restart: the saved replay playing](docs/observed/step6-replay-after-restart.png)
+
+Not covered here: sound heard (the lab is muted; step 4 measured AHI being
+fed), a stick or pad (step 3), and an Amiga without RTG (the game needs an
+800x600 screen).
