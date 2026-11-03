@@ -45,9 +45,10 @@ The choice, 3 November 2026:
   which holds only on a little-endian machine: those surfaces now have their
   masks set so the bytes are R, G, B on either byte order (the 68040 is
   big-endian). The OpenGL and GP2X renderers are not built, and the Graphics
-  options offer SDL only. Upstream's audio callback stays for now (SDL 2
-  keeps `SDL_OpenAudio`); its mute switch unlocked SDL's audio lock without
-  having locked it, which SDL 2's mutex does not allow, and no longer does.
+  options offer SDL only. Upstream's own mixer on SDL's audio callback is
+  replaced by SDL2_mixer in `patches/0008` (below); in 0001 its mute switch
+  no longer unlocks SDL's audio lock without having locked it, which SDL 2's
+  mutex does not allow.
 - `patches/0002-no-boost.patch`: the four Boost pieces the game itself uses,
   as a few lines of standard C++ each (a CRC-32 that gives the same value as
   `boost::crc_32_type`, so replays keep their checksum; a fixed-size ring for
@@ -76,6 +77,15 @@ drawn again each frame. If play cannot hold the game's own speed (75 steps a
 second, `gamefps` in the settings; every step is drawn, so a slow frame
 slows the game itself), that is reported, not hidden. GFOpenMulticore has nothing to take here: one
 serial game loop.
+
+- `patches/0008-sdl2-mixer.patch`: the sounds are played by SDL2_mixer
+  (GFOpenGPU's `SDL2_mixer.module`, AHI underneath) instead of upstream's
+  own mixing in SDL's audio callback: the same format (44.1 kHz, 16 bits,
+  stereo, 1,024-sample buffers), each sound loaded once from the data and
+  played on a free channel at its volume times the global volume; mute stops
+  what plays and starts nothing new. With `-fps` the log gives, every five
+  seconds, the mixer's buffers, how many came more than half a buffer late,
+  the longest gap between two, and the sounds started.
 
 ## Building
 
@@ -168,7 +178,7 @@ game; the build scripts are MIT.
 | Launch to the menu, 800x600 on a screen of its own | done (75 frames a second; a window on the Workbench from Options) |
 | Keyboard play | done (a match against a bot, two players, the menus) |
 | Joystick / pad | not tested: no stick in the lab (SDL lists port 2) |
-| Sound | not yet |
+| Sound | AHI through SDL2_mixer at 44.1 kHz, no late buffers; not heard (muted lab) |
 | Settings and replays across a restart | not yet |
 | Drawer with GlowIcons, start from Workbench, LhA package | not yet |
 | Network play | not built |
@@ -294,3 +304,36 @@ are at the start of the second run's input log, before the menu took them.
 Joystick and CD32 pad: not qualified. No stick or pad event could be made
 here; a person with a stick in port 2 (or a CD32 pad) has to choose
 Joystick for the left player in Options, Input Options, and play.
+
+### Sound, 3 November 2026
+
+Commit `e4a2ad4` adds `patches/0008-sdl2-mixer.patch` and links
+SDL2_mixer (`build-amiga.sh` checks the stove has `libSDL2_mixer.a` and its
+header, and the receipt names both). Executable (open5, Cradle job
+`j20261103T034436-8ab34b`): SHA-256
+`6073e10205ba1d5fef5f5aee0564d725b5167eefbc32bd17e4603cf3d6f47aa5`
+(2,129,788 bytes; `receipts/4-sound-open5-stove_build.json`). The data is
+step 3's. An earlier build of the same patch without the count of sounds
+started (`14b7c45`, job `j20261103T033621-d73fcd`) gave the same buffer
+readings over 85 seconds.
+
+In `lab:blobby`, with the settings as upstream has them (`global_volume`
+1.0, `mute` false), `blobby -fps Ami reduced.lua` and `HoldKeys 120 HOLD 11
+CYCLE 20,22 PERIOD 30`: a match against the bot, which won 15 to 0 in 93
+seconds.
+
+- `audio "ahi" through SDL2_mixer: 44100 Hz, 2 channels, 16 bits, 1024
+  samples a buffer`: AHI, 23.2 ms buffers.
+- **Buffers every five seconds: 215 to 217** in all 17 readings after the
+  first (224, with the start-up): 43.1 a second, as 44,100 / 1,024 gives.
+  **None late**; the longest gap between two buffers was 26 to 27 ms.
+- **75 sounds started** (the two silent ones at start-up among them): the
+  whistle at each fault and the thump of the ball on a blob, 3 to 6 every
+  five seconds; none failed to load.
+- Frames: 73.4 to 75.1 a second, as without sound. No freeze.
+
+Labs are muted: AHI was opened and fed at the full rate and the sounds were
+started, which is what a muted lab can show. That it sounds right is still
+to be heard on a real instance.
+
+![Play with sound](docs/observed/step4-play-sound.png)
