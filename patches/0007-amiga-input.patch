@@ -1,0 +1,148 @@
+diff --git a/data/inputconfig.xml b/data/inputconfig.xml
+index 8322fac..aa95a85 100644
+--- a/data/inputconfig.xml
++++ b/data/inputconfig.xml
+@@ -8,14 +8,14 @@
+ 	<var name="left_blobby_keyboard_jump" value="w"/>
+ 	<var name="left_blobby_joystick_left" value="joy_0_axis_-1"/>
+ 	<var name="left_blobby_joystick_right" value="joy_0_axis_1"/>
+-	<var name="left_blobby_joystick_jump" value="joy_0_axis_2"/>
++	<var name="left_blobby_joystick_jump" value="joy_0_button_0"/>
+ 	<var name="right_blobby_device" value="keyboard"/>
+ 	<var name="right_blobby_mouse_jumpbutton" value="1"/>
+ 	<var name="right_blobby_keyboard_left" value="left"/>
+ 	<var name="right_blobby_keyboard_right" value="right"/>
+ 	<var name="right_blobby_keyboard_jump" value="up"/>
+-	<var name="right_blobby_joystick_left" value="joy_0_button_0"/>
+-	<var name="right_blobby_joystick_right" value="joy_0_button_1"/>
+-	<var name="right_blobby_joystick_jump" value="joy_0_button_2"/>
++	<var name="right_blobby_joystick_left" value="joy_1_axis_-1"/>
++	<var name="right_blobby_joystick_right" value="joy_1_axis_1"/>
++	<var name="right_blobby_joystick_jump" value="joy_1_button_0"/>
+ </userconfig>
+ 
+diff --git a/src/InputDevice.h b/src/InputDevice.h
+index c13a0c6..eec5eaa 100644
+--- a/src/InputDevice.h
++++ b/src/InputDevice.h
+@@ -53,8 +53,20 @@ public:
+ 		while ((lastjoy = SDL_JoystickOpen(id)))
+ 		{
+ 			mJoyMap[id] = lastjoy;
++#if defined(__amigaos__)
++			// the sticks and pads SDL found, for the log
++			std::cout << "Joystick " << id << ": \""
++				<< SDL_JoystickName(lastjoy) << "\", "
++				<< SDL_JoystickNumAxes(lastjoy) << " axes, "
++				<< SDL_JoystickNumButtons(lastjoy) << " buttons"
++				<< std::endl;
++#endif
+ 			id++;
+ 		}
++#if defined(__amigaos__)
++		if (id == 0)
++			std::cout << "No joystick" << std::endl;
++#endif
+ 		return id;
+ 	}
+ 	
+diff --git a/src/InputManager.cpp b/src/InputManager.cpp
+index 0b1c0a2..361586e 100644
+--- a/src/InputManager.cpp
++++ b/src/InputManager.cpp
+@@ -26,6 +26,62 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ 
+ InputManager* InputManager::mSingleton = 0;
+ 
++#if defined(__amigaos__)
++#include <cstdio>
++/*
++ * BLOBBY_INPUT (SetEnv BLOBBY_INPUT RAM:input.txt): every key, mouse
++ * button, joystick and pad event the game takes, with its time, for lab
++ * play tests.
++ */
++static void logInput(const SDL_Event& ev)
++{
++	static FILE* f = NULL;
++	static bool tried = false;
++	if (!tried)
++	{
++		const char* fn = SDL_getenv("BLOBBY_INPUT");
++		tried = true;
++		if (fn && fn[0])
++			f = fopen(fn, "a");
++	}
++	if (!f)
++		return;
++	switch (ev.type)
++	{
++		case SDL_KEYDOWN:
++		case SDL_KEYUP:
++			if (ev.key.repeat)
++				return;
++			fprintf(f, "%u key %s %s\n", (unsigned)ev.key.timestamp,
++				SDL_GetKeyName(ev.key.keysym.sym),
++				ev.type == SDL_KEYDOWN ? "down" : "up");
++			break;
++		case SDL_MOUSEBUTTONDOWN:
++		case SDL_MOUSEBUTTONUP:
++			fprintf(f, "%u mouse button %d %s at %d,%d\n",
++				(unsigned)ev.button.timestamp, ev.button.button,
++				ev.type == SDL_MOUSEBUTTONDOWN ? "down" : "up",
++				ev.button.x, ev.button.y);
++			break;
++		case SDL_JOYBUTTONDOWN:
++		case SDL_JOYBUTTONUP:
++			fprintf(f, "%u joy %d button %d %s\n",
++				(unsigned)ev.jbutton.timestamp, (int)ev.jbutton.which,
++				ev.jbutton.button,
++				ev.type == SDL_JOYBUTTONDOWN ? "down" : "up");
++			break;
++		case SDL_JOYAXISMOTION:
++			fprintf(f, "%u joy %d axis %d %d\n",
++				(unsigned)ev.jaxis.timestamp, (int)ev.jaxis.which,
++				ev.jaxis.axis, ev.jaxis.value);
++			break;
++		default:
++			return;
++	}
++	fflush(f);
++}
++#endif
++
+ InputManager::InputManager()
+ {
+ 	SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+@@ -142,6 +198,10 @@ void InputManager::updateInput()
+ 	SDL_JoystickUpdate();
+ 
+ 	while (SDL_PollEvent(&event))
++	{
++#if defined(__amigaos__)
++	logInput(event);
++#endif
+ 	switch (event.type)
+ 	{
+ 		case SDL_QUIT:
+@@ -203,6 +263,13 @@ void InputManager::updateInput()
+ 				getJoystickIndex(event.jbutton.which),
+ 				JoystickAction::BUTTON, event.jbutton.button);
+ 			mLastJoyAction = joyAction.toString();
++#if defined(__amigaos__)
++			// a CD32 pad's Play (lowlevel.library, button 4) or a
++			// GFOpenInput pad's Start (button 6) is Escape: pause in
++			// a game, back in the menus
++			if (event.jbutton.button == 4 || event.jbutton.button == 6)
++				mExit = true;
++#endif
+ 			break;
+ 		}
+ 		case SDL_JOYAXISMOTION:
+@@ -241,6 +308,7 @@ void InputManager::updateInput()
+ #endif
+ */
+ 	}
++	}
+ 
+ 	// Device gives status to the playerinput
+ 	if (mInputDevice[LEFT_PLAYER] && !IMGUI::getSingleton().usingCursor())
