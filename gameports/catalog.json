@@ -17,7 +17,8 @@
         "files": ["data/config.xml", "data/inputconfig.xml", "data/lang_de.xml", "data/lang_en.xml", "data/lang_fr.xml", "data/rules.lua", "data/Icon.bmp"],
         "excluded": ["data/gf2x (old graphics the game does not load)", "data/scripts/old (old bots upstream does not install)", "data/server.xml and data/onlineserver.xml (network play is not built)"]
       },
-      "user": "PROGDIR:User"
+      "user": "PROGDIR:User",
+      "package": {"archive": "blobbyvolley2-0.9c-amigaos3-test1-68040.lha", "bytes": 1827608, "sha256": "44cd097a5aaf0bee676c6fafc332799ad5b221523b7b1c63f0407e3576ee96e0", "job": "j20261103T035627-058ea7", "drawer": "BlobbyVolley2"}
     }
   }
 }
