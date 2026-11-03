@@ -20,15 +20,19 @@ Requirements
 Installing
 ----------
 
-Unpack the archive where you keep games (lha x blobbyvolley2-...lha
-Games:, or OpenCompress x on AmiCradle) and open the BlobbyVolley2 drawer.
-The game writes only in the User drawer it makes beside itself (its
-settings and saved replays).
+OS 3.2 has no lha command: unpack the archive with OpenCompress (on
+AmiCradle, SYS:Utilities/OpenCompress), for example into RAM:
 
-If opening the game's icon seems to do nothing, SDL2.module or
-SDL2_mixer.module is missing from LIBS:GFOpenGPU/ (an older AmiCradle
-may have them only in LIBS:OpenGPU/: copy them across). Started from a
-Shell, the game says which one it needs.
+  OpenCompress x blobbyvolley2-@VERSION@-68040.lha RAM:
+
+Then open RAM: and double-click Install-BlobbyVolley2. The Amiga
+Installer checks for a 68040 or 68060 with its FPU, asks for the drawer
+to put BlobbyVolley2 in (Work:Games is offered), makes sure
+LIBS:GFOpenGPU has SDL2.module and SDL2_mixer.module (copying them from
+LIBS:OpenGPU when only that has them, as on an older AmiCradle), and
+copies the game. The game writes only in the User drawer it makes beside
+itself (its settings and saved replays); run the Installer again to
+update, and User is left as it is.
 
 Playing
 -------

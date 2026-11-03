@@ -9,7 +9,8 @@ and data-receipt.json). The drawer gets the game, its data drawer (every
 file of blobby-data.tar, as untar would put it beside the program), the
 icons from icons/, ReadMe (package/ReadMe.in with the version and the
 checksums filled in) and the GPL text (COPYING). Nothing else: the game
-makes PROGDIR:User itself.
+makes PROGDIR:User itself. Beside the drawer: its icon, and the Amiga
+Installer script Install-BlobbyVolley2 and its icon (package/installer/).
 
 OUT gets:
   blobbyvolley2-VERSION-68040.lha     the archive (level-1 headers, -lh5-, as
@@ -118,6 +119,18 @@ def data_members(tar_path: Path) -> list[tuple[str, bytes]]:
     return out
 
 
+def installer_files(version: str) -> list[tuple[str, bytes]]:
+    """Install-DRAWER and its icon, for the archive's root beside the drawer:
+    package/installer/, made by amicradle scripts/port_installer.py from
+    package/installer.json. A script made for another version is refused."""
+    script = f"Install-{DRAWER}"
+    blob = (ROOT / "package" / "installer" / script).read_bytes()
+    head = blob.split(b"\n", 1)[0].decode("latin-1")
+    if not head.startswith(f"; $VER: {script} {version} ("):
+        raise SystemExit(f"{script} was made for another version ({head!r}): run port_installer.py again")
+    return [(script, blob), (f"{script}.info", (ROOT / "package" / "installer" / f"{script}.info").read_bytes())]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--build", required=True, type=Path)
@@ -157,6 +170,8 @@ def main() -> int:
     for name, blob in files:
         add(f"{DRAWER}/{name}", blob)
     add(f"{DRAWER}.info", (ROOT / "icons" / f"{DRAWER}.info").read_bytes())
+    for name, blob in installer_files(args.version):
+        add(name, blob)
 
     args.out.mkdir(parents=True, exist_ok=True)
     lha = lha_archive.write(args.out / f"{base}.lha", members)
