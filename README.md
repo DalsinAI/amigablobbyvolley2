@@ -73,8 +73,8 @@ The choice, 3 November 2026:
 What could stop it, and the stop rule: every frame is drawn by the CPU into
 the window surface at 800x600, and in the menus the whole background is
 drawn again each frame. If play cannot hold the game's own speed (75 steps a
-second, `gamefps` in the settings; the game drops frames to keep the speed),
-that is reported, not hidden. GFOpenMulticore has nothing to take here: one
+second, `gamefps` in the settings; every step is drawn, so a slow frame
+slows the game itself), that is reported, not hidden. GFOpenMulticore has nothing to take here: one
 serial game loop.
 
 ## Building
@@ -128,9 +128,10 @@ or 68060 with its FPU.
 
 `-fps` logs the screen the game got and each second's frame rate to
 standard output (`fps 75.0 at 12.012 s`); upstream shows the rate only in
-the window's title. The game runs its logic and drawing at 75 steps a
-second (`gamefps` in the settings) and drops frames to keep that speed when
-the machine is slower.
+the window's title. The game draws every step of its logic, at most 75 a
+second (`gamefps` in the settings); upstream's frame dropping is never
+switched on, so when the machine cannot draw 75 frames a second the game
+itself runs slower, and the logged rate is the game's speed as well.
 
 ## Rights
 
