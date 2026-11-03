@@ -1,0 +1,10 @@
+{
+  "about": "The Workbench icons of the BlobbyVolley2 drawer: python3 AMICRADLE/scripts/port_icons.py icons/icons.json --out icons (DalsinAI/amicradle). The art is Blobby Volley 2's own window icon (data/Icon.bmp at the pinned commit, its black corners made see-through; GPL-2.0-or-later with the game).",
+  "drawer": {"name": "BlobbyVolley2"},
+  "badge": "art/blobby.png",
+  "icons": [
+    {"file": "blobby.info", "kind": "tool", "stack": 262144},
+    {"file": "ReadMe.info", "kind": "readme"},
+    {"file": "COPYING.info", "kind": "readme"}
+  ]
+}
