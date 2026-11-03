@@ -1,0 +1,14 @@
+diff --git a/src/TextManager.cpp b/src/TextManager.cpp
+index c699f13..59224b0 100644
+--- a/src/TextManager.cpp
++++ b/src/TextManager.cpp
+@@ -47,6 +47,9 @@ TextManager* TextManager::createTextManager(std::string langname){
+ 		std::cerr << "error loading language " << langfile << "!" << std::endl;
+ 		std::cerr << "\tfalling back to english" << std::endl;
+ 	}
++	// upstream returned nothing here: GCC takes the missing return for a
++	// path never taken, and the program would run on into the next code
++	return mSingleton;
+ }
+ 
+ const TextManager* TextManager::getSingleton(){

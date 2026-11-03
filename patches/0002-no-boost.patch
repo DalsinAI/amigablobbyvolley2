@@ -1,0 +1,171 @@
+diff --git a/src/RenderManager.cpp b/src/RenderManager.cpp
+index cc9a2b9..34ab432 100644
+--- a/src/RenderManager.cpp
++++ b/src/RenderManager.cpp
+@@ -20,7 +20,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #include "RenderManager.h"
+ 
+ #include <physfs.h>
+-#include <boost/scope_exit.hpp>
+ 
+ RenderManager* RenderManager::mSingleton = 0;
+ 
+@@ -82,15 +81,13 @@ SDL_Surface* RenderManager::loadSurface(std::string filename)
+ 	int fileLength = PHYSFS_fileLength(fileHandle);
+ 	PHYSFS_uint8* fileBuffer = new PHYSFS_uint8[fileLength];
+ 	
+-	// ensures that fileHandle and fileBuffer are freed at end of scope,
+-	BOOST_SCOPE_EXIT( (&fileHandle)(&fileBuffer) ){
+-		PHYSFS_close(fileHandle);
+-		delete[] fileBuffer;
+-	} BOOST_SCOPE_EXIT_END
+-	
++	// without Boost: fileHandle and fileBuffer are freed before
++	// anything is thrown or returned
+ 	PHYSFS_read(fileHandle, fileBuffer, 1, fileLength);
+ 	SDL_RWops* rwops = SDL_RWFromMem(fileBuffer, fileLength);
+ 	SDL_Surface* newSurface = SDL_LoadBMP_RW(rwops , 1);
++	PHYSFS_close(fileHandle);
++	delete[] fileBuffer;
+ 	if (!newSurface)
+ 		throw FileLoadException(filename);
+ 	return newSurface;
+diff --git a/src/ReplayRecorder.cpp b/src/ReplayRecorder.cpp
+index 93ea004..93bac20 100644
+--- a/src/ReplayRecorder.cpp
++++ b/src/ReplayRecorder.cpp
+@@ -24,7 +24,36 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #include <algorithm>
+ #include <iostream>
+ #include <sstream>
+-#include <boost/crc.hpp>
++
++// CRC-32 as boost::crc_32_type computes it (polynomial 0x04C11DB7,
++// reflected, initial and final value 0xFFFFFFFF), so replays keep the
++// checksum they had with Boost
++namespace
++{
++	class ReplayCrc32
++	{
++	public:
++		ReplayCrc32() : mCrc(0xFFFFFFFF) {}
++		void operator()(unsigned char byte)
++		{
++			mCrc ^= byte;
++			for (int bit = 0; bit < 8; ++bit)
++				mCrc = (mCrc >> 1) ^ (0xEDB88320 & (0 - (mCrc & 1)));
++		}
++		void process_bytes(const void* data, std::size_t length)
++		{
++			const unsigned char* bytes = (const unsigned char*)data;
++			for (std::size_t i = 0; i < length; ++i)
++				(*this)(bytes[i]);
++		}
++		uint32_t checksum() const
++		{
++			return mCrc ^ 0xFFFFFFFF;
++		}
++	private:
++		uint32_t mCrc;
++	};
++}
+ #include "blobby_sdl2.h"
+ 
+ ChecksumException::ChecksumException(std::string filename, uint32_t expected, uint32_t real)
+@@ -78,7 +107,7 @@ void ReplayRecorder::save(const std::string& filename)
+ 
+ 	PHYSFS_write(fileHandle, validHeader, 1, sizeof(validHeader));
+ 	
+-	boost::crc_32_type crc;
++	ReplayCrc32 crc;
+ 	crc(mServingPlayer);
+ 	crc = std::for_each(mPlayerNames[LEFT_PLAYER].begin(), mPlayerNames[LEFT_PLAYER].end(), crc);
+ 	crc = std::for_each(mPlayerNames[RIGHT_PLAYER].begin(), mPlayerNames[RIGHT_PLAYER].end(), crc);
+@@ -156,7 +185,7 @@ void ReplayRecorder::load(const std::string& filename)
+ 	mPlayerNames[LEFT_PLAYER] = readString();
+ 	mPlayerNames[RIGHT_PLAYER] = readString();
+ 
+-	boost::crc_32_type realcrc;
++	ReplayCrc32 realcrc;
+ 	realcrc(mServingPlayer);
+ 	realcrc = std::for_each(mPlayerNames[LEFT_PLAYER].begin(), mPlayerNames[LEFT_PLAYER].end(), realcrc);
+ 	realcrc = std::for_each(mPlayerNames[RIGHT_PLAYER].begin(), mPlayerNames[RIGHT_PLAYER].end(), realcrc);
+diff --git a/src/ScriptedInputSource.h b/src/ScriptedInputSource.h
+index 1832ab2..dc7e9a4 100644
+--- a/src/ScriptedInputSource.h
++++ b/src/ScriptedInputSource.h
+@@ -22,7 +22,38 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #include "Global.h"
+ #include "InputSource.h"
+ #include "Vector.h"
+-#include <boost/circular_buffer.hpp>
++#include <deque>
++
++// The few parts of boost::circular_buffer the bots use: a fixed number of
++// places, the oldest dropped when a new one is pushed, read by index from
++// the oldest
++template<typename T>
++class BotRingBuffer
++{
++public:
++	BotRingBuffer() : mCapacity(0) {}
++	void set_capacity(std::size_t capacity)
++	{
++		mCapacity = capacity;
++		while (mItems.size() > mCapacity)
++			mItems.pop_front();
++	}
++	void push_back(const T& item)
++	{
++		if (mCapacity == 0)
++			return;
++		if (mItems.size() == mCapacity)
++			mItems.pop_front();
++		mItems.push_back(item);
++	}
++	const T& operator[](std::size_t index) const
++	{
++		return mItems[index];
++	}
++private:
++	std::size_t mCapacity;
++	std::deque<T> mItems;
++};
+ 
+ #include <string>
+ // ScriptedInputSource provides an implementation of InputSource, which uses
+@@ -121,8 +152,8 @@ private:
+ 	bool mOnBounce;
+ 	
+ 	// ball position and velocity in adapted coordinate system
+-	boost::circular_buffer<Vector2> mBallPositions;
+-	boost::circular_buffer<Vector2> mBallVelocities;
++	BotRingBuffer<Vector2> mBallPositions;
++	BotRingBuffer<Vector2> mBallVelocities;
+ 	
+ 	float mLastBallSpeed;
+ 	float mLastBallSpeedVirtual;
+diff --git a/src/state/LocalGameState.cpp b/src/state/LocalGameState.cpp
+index 81cb998..674cb66 100644
+--- a/src/state/LocalGameState.cpp
++++ b/src/state/LocalGameState.cpp
+@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #include "LocalGameState.h"
+ 
+ #include <sstream>
+-#include <boost/lexical_cast.hpp>
++#include <sstream>
+ 
+ #include "DuelMatch.h"
+ #include "InputManager.h"
+@@ -47,7 +47,9 @@ LocalGameState::LocalGameState()
+     mSaveReplay = false;
+     mWinner = false;
+     
+-    mFilename = boost::lexical_cast<std::string> (std::time(0));
++    std::ostringstream name;
++    name << std::time(0);
++    mFilename = name.str();
+     
+     mLeftPlayer.loadFromConfig("left");
+     mRightPlayer.loadFromConfig("right");
