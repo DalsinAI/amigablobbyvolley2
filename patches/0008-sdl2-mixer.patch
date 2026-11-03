@@ -1,0 +1,373 @@
+diff --git a/src/SoundManager.cpp b/src/SoundManager.cpp
+index 0ce5a1d..0d0d542 100644
+--- a/src/SoundManager.cpp
++++ b/src/SoundManager.cpp
+@@ -19,13 +19,54 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ 
+ #include <iostream>
+ #include <cassert>
++#include <cstdio>
+ #include <physfs.h> 
+ #include "SoundManager.h"
+ #include "Global.h"
+ 
+ SoundManager* SoundManager::mSingleton;
+ 
+-Sound* SoundManager::loadSound(const std::string& filename)
++// the mixer's own sound channels: more than the game ever plays at once
++static const int MIX_CHANNELS_USED = 16;
++
++#if defined(__amigaos__)
++// the mixer's buffers, counted in its post-mix hook (the audio task):
++// how many, how many came more than half a buffer late, the longest gap
++static SDL_atomic_t sBuffers;
++static SDL_atomic_t sLate;
++static SDL_atomic_t sLongestGap;
++static Uint32 sLastBuffer = 0;
++static Uint32 sBufferTicks = 0;
++
++static void countBuffer(void*, Uint8*, int)
++{
++	Uint32 now = SDL_GetTicks();
++	if (sLastBuffer != 0)
++	{
++		int gap = int(now - sLastBuffer);
++		if (gap > int(sBufferTicks + sBufferTicks / 2))
++			SDL_AtomicAdd(&sLate, 1);
++		if (gap > SDL_AtomicGet(&sLongestGap))
++			SDL_AtomicSet(&sLongestGap, gap);
++	}
++	sLastBuffer = now;
++	SDL_AtomicAdd(&sBuffers, 1);
++}
++
++void SoundManager::logBuffers()
++{
++	if (!mInitialised)
++		return;
++	int buffers = SDL_AtomicSet(&sBuffers, 0);
++	int late = SDL_AtomicSet(&sLate, 0);
++	int longest = SDL_AtomicSet(&sLongestGap, 0);
++	printf("audio %d buffers, %d late, longest gap %d ms\n",
++		buffers, late, longest);
++	fflush(stdout);
++}
++#endif
++
++Mix_Chunk* SoundManager::loadSound(const std::string& filename)
+ {
+ 	PHYSFS_file* fileHandle = PHYSFS_openRead(filename.c_str());
+ 	if (!fileHandle)
+@@ -34,51 +75,13 @@ Sound* SoundManager::loadSound(const std::string& filename)
+ 	PHYSFS_uint8* fileBuffer = 
+ 		new PHYSFS_uint8[fileLength];
+ 	PHYSFS_read(fileHandle, fileBuffer, 1, fileLength);
+-	SDL_RWops* rwops = SDL_RWFromMem(fileBuffer, fileLength);
+-
+-	SDL_AudioSpec newSoundSpec;
+-	Uint8* newSoundBuffer;
+-	Uint32 newSoundLength;
+-	if (!SDL_LoadWAV_RW(rwops , 1,
+-			&newSoundSpec, &newSoundBuffer, &newSoundLength))
+-		throw FileLoadException(filename);
+-	delete[] fileBuffer;
+ 	PHYSFS_close(fileHandle);
+-
+-	if (newSoundSpec.freq == mAudioSpec.freq &&
+-		newSoundSpec.format == mAudioSpec.format &&
+-		newSoundSpec.channels == mAudioSpec.channels)
+-	{
+-		Sound *newSound = new Sound;
+-		newSound->data = new Uint8[newSoundLength];
+-		memcpy(newSound->data, newSoundBuffer, newSoundLength);
+-		newSound->length = newSoundLength;
+-		newSound->position = 0;
+-		SDL_FreeWAV(newSoundBuffer);
+-                return newSound;
+-	}
+-	else
+-	{
+-		SDL_AudioCVT conversionStructure;
+-		if (!SDL_BuildAudioCVT(&conversionStructure,
+-			newSoundSpec.format, newSoundSpec.channels, newSoundSpec.freq,
+-			mAudioSpec.format, mAudioSpec.channels, mAudioSpec.freq))
+-				throw FileLoadException(filename);
+-		conversionStructure.buf = 
+-			new Uint8[newSoundLength * conversionStructure.len_mult];
+-		memcpy(conversionStructure.buf, newSoundBuffer, newSoundLength);
+-		conversionStructure.len = newSoundLength;
+-
+-		if (SDL_ConvertAudio(&conversionStructure))
+-			throw FileLoadException(filename);
+-		SDL_FreeWAV(newSoundBuffer);
+-
+-		Sound *newSound = new Sound;
+-		newSound->data = conversionStructure.buf;
+-		newSound->length = Uint32(conversionStructure.len_cvt);
+-		newSound->position = 0;	
+-		return newSound;
+-	}
++	// the mixer converts the sound to its own format and keeps a copy
++	Mix_Chunk* chunk = Mix_LoadWAV_RW(SDL_RWFromConstMem(fileBuffer, fileLength), 1);
++	delete[] fileBuffer;
++	if (!chunk)
++		throw FileLoadException(filename);
++	return chunk;
+ }
+ 
+ 
+@@ -88,20 +91,20 @@ bool SoundManager::playSound(const std::string& filename, float volume)
+ 		return false;
+ 	try
+ 	{
+-		Sound* soundBuffer = mSound[filename];
+-		if (!soundBuffer)
++		Mix_Chunk* chunk = mSound[filename];
++		if (!chunk)
+ 		{
+-			soundBuffer = loadSound(filename);
+-			mSound[filename] = soundBuffer;
++			chunk = loadSound(filename);
++			mSound[filename] = chunk;
+ 		}
+-		Sound soundInstance = Sound(*soundBuffer);
+-		soundInstance.volume = 
+-			volume > 0.0 ? (volume < 1.0 ? volume : 1.0) : 0.0;
+-		SDL_LockAudio();
+-		mPlayingSound.push_back(soundInstance);
+-		SDL_UnlockAudio();
++		if (mMute)
++			return true;
++		volume = volume > 0.0 ? (volume < 1.0 ? volume : 1.0) : 0.0;
++		int channel = Mix_PlayChannel(-1, chunk, 0);
++		if (channel >= 0)
++			Mix_Volume(channel, int(MIX_MAX_VOLUME * mVolume * volume));
+ 	}
+-	catch (FileLoadException exception)
++	catch (FileLoadException& exception)
+ 	{
+ 		std::cerr << "Warning: Couldn't load "
+ 			<< exception.filename << " !" << std::endl;
+@@ -112,75 +115,48 @@ bool SoundManager::playSound(const std::string& filename, float volume)
+ 
+ bool SoundManager::init()
+ {
+-	SDL_AudioSpec desiredSpec;
+-	desiredSpec.freq = 44100;
+-	desiredSpec.format = AUDIO_S16LSB;
+-	desiredSpec.channels = 2;
+-	desiredSpec.samples = 1024;
+-	desiredSpec.callback = playCallback;
+-	desiredSpec.userdata = mSingleton;
+-
+-	
+-	if (SDL_OpenAudio(&desiredSpec, &mAudioSpec))
++	// upstream's format: 44.1 kHz, 16 bits, stereo, 1,024-sample buffers
++	if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024) < 0)
+ 	{
+ 		std::cerr << "Warning: Couldn't open audio Device!"
+ 			<< std::endl;
+-		std::cerr << "Reason: " << SDL_GetError() << std::endl;
++		std::cerr << "Reason: " << Mix_GetError() << std::endl;
+ 		return false;
+ 	}
+-	SDL_PauseAudio(0);
++	Mix_AllocateChannels(MIX_CHANNELS_USED);
++#if defined(__amigaos__)
++	int freq = 0, channels = 0;
++	Uint16 format = 0;
++	Mix_QuerySpec(&freq, &format, &channels);
++	sBufferTicks = 1024 * 1000 / (freq > 0 ? freq : 44100);
++	Mix_SetPostMix(countBuffer, NULL);
++	printf("audio \"%s\" through SDL2_mixer: %d Hz, %d channels, "
++		"%d bits, 1024 samples a buffer\n",
++		SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "?",
++		freq, channels, SDL_AUDIO_BITSIZE(format));
++	fflush(stdout);
++#endif
+ 	mInitialised = true;
+ 	mVolume = 1.0;
+ 	return true;
+ }
+ 
+-void SoundManager::playCallback(void* singleton, Uint8* stream, int length)
+-{	
+-	std::list<Sound>& playingSound = 
+-		((SoundManager*)singleton)->mPlayingSound;
+-	int volume = int(SDL_MIX_MAXVOLUME * 
+-		((SoundManager*)singleton)->mVolume);
+-	for (std::list<Sound>::iterator iter = playingSound.begin();
+-		       iter != playingSound.end(); ++iter)
+-	{
+-		int bytesLeft = iter->length
+-			- iter->position;
+-		if (bytesLeft < length)
+-		{
+-			SDL_MixAudio(stream, iter->data + iter->position,
+-				bytesLeft, int(volume * iter->volume));
+-			std::list<Sound>::iterator eraseIter = iter;
+-			std::list<Sound>::iterator nextIter = ++iter;
+-			playingSound.erase(eraseIter);
+-			iter = nextIter;
+-			// prevents increment of past-end-interator
+-			if(iter == playingSound.end())
+-				break;
+-		}
+-		else
+-		{
+-			SDL_MixAudio(stream, iter->data + iter->position,
+-				length, int(volume * iter->volume));
+-			iter->position += length;
+-		}
+-	}
+-}
+-
+ void SoundManager::deinit()
+ {
+-	for (std::map<std::string, Sound*>::iterator iter = mSound.begin();
++	if (!mInitialised)
++		return;
++	Mix_HaltChannel(-1);
++#if defined(__amigaos__)
++	Mix_SetPostMix(NULL, NULL);
++#endif
++	for (std::map<std::string, Mix_Chunk*>::iterator iter = mSound.begin();
+ 			iter != mSound.end(); ++iter)
+ 	{
+ 		if (iter->second)
+-		{
+-			if (iter->second->data != 0)
+-			{
+-				delete[] iter->second->data;
+-			}
+-			delete iter->second;
+-		}
++			Mix_FreeChunk(iter->second);
+ 	}
+-	SDL_CloseAudio();
++	mSound.clear();
++	Mix_CloseAudio();
+ 	mInitialised = false;
+ }
+ 
+@@ -193,6 +169,8 @@ SoundManager::SoundManager()
+ {
+ 	mSingleton = this;
+ 	mInitialised = false;
++	mMute = false;
++	mVolume = 1.0;
+ }
+ 
+ SoundManager::~SoundManager()
+@@ -217,23 +195,9 @@ void SoundManager::setVolume(float volume)
+ 
+ void SoundManager::setMute(bool mute)
+ {
+-	static bool locked = false;
+-	if (mute)
+-	{
+-		if (!locked)  //locking audio twice leads to a bug(??)
+-		{
+-			locked = true;
+-			SDL_LockAudio();
+-		}
+-	}
+-	else
+-	{
+-		mPlayingSound.clear();
+-		// SDL 2: unlock only what was locked (its audio lock is a
+-		// mutex, which must not be released by one who holds none)
+-		if (locked)
+-			SDL_UnlockAudio();
+-		locked = false;
+-	}
+-	SDL_PauseAudio((int)mute);
++	// muted: what plays stops and nothing new starts (upstream paused
++	// SDL's audio and dropped the sounds it was playing)
++	if (mute && mInitialised)
++		Mix_HaltChannel(-1);
++	mMute = mute;
+ }
+diff --git a/src/SoundManager.h b/src/SoundManager.h
+index 7cf4c56..48a990d 100644
+--- a/src/SoundManager.h
++++ b/src/SoundManager.h
+@@ -20,23 +20,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ #pragma once
+ 
+ #include "blobby_sdl2.h"
++#include <SDL_mixer.h>
+ #include <string>
+ #include <map>
+-#include <list>
+-
+-struct Sound
+-{
+-	Sound()
+-	{
+-		data = 0;
+-	}
+-	
+-	Uint8* data;
+-	Uint32 length;
+-	int position;
+-	float volume;
+-};
+ 
++// SDL2_mixer plays the sounds (AHI on AmigaOS, through GFOpenGPU's
++// SDL2_mixer.module); upstream mixed them itself in SDL's audio callback
+ class SoundManager
+ {
+ private:
+@@ -45,16 +34,13 @@ private:
+ 
+ 	static SoundManager* mSingleton;
+ 	
+-	// This maps filenames to sound buffers, which are always in
+-	// target format
+-	std::map<std::string, Sound*> mSound;
+-	std::list<Sound> mPlayingSound;
+-	SDL_AudioSpec mAudioSpec;
++	// This maps filenames to sounds, loaded once and in the mixer's format
++	std::map<std::string, Mix_Chunk*> mSound;
+ 	bool mInitialised;
++	bool mMute;
+ 	float mVolume;
+ 
+-	Sound* loadSound(const std::string& filename);	
+-	static void playCallback(void* singleton, Uint8* stream, int length);
++	Mix_Chunk* loadSound(const std::string& filename);
+ public:
+ 	static SoundManager* createSoundManager();
+ 	static SoundManager& getSingleton();
+@@ -64,4 +50,8 @@ public:
+ 	bool playSound(const std::string& filename, float volume);
+ 	void setVolume(float volume);
+ 	void setMute(bool mute);
++#if defined(__amigaos__)
++	// the mixer's buffers since the last call, for the -fps log
++	void logBuffers();
++#endif
+ };
+diff --git a/src/main.cpp b/src/main.cpp
+index 1427cd7..c6fec1a 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -252,6 +252,7 @@ int main(int argc, char* argv[])
+         Uint32 fpsStart = SDL_GetTicks();
+         Uint32 fpsSecond = fpsStart;
+         int fpsFrames = 0;
++        int fpsSeconds = 0;
+ #endif
+         while (running)
+         {
+@@ -303,6 +304,9 @@ int main(int argc, char* argv[])
+                     fflush(stdout);
+                     fpsSecond = now;
+                     fpsFrames = 0;
++                    // and every five seconds the mixer's buffers
++                    if (++fpsSeconds % 5 == 0)
++                        SoundManager::getSingleton().logBuffers();
+                 }
+             }
+ #endif
