@@ -65,9 +65,9 @@ ARCHIVE=${COMPILER#* }
 "$CC" --version | head -n 1
 "$CC" --version | head -n 1 | grep -q "$RELEASE" || { echo "$CC is not $RELEASE"; exit 2; }
 
-# SDL 2 from the stove's SDK (GFOpenGPU's link stub: the program opens
-# LIBS:GFOpenGPU/SDL2.module when it runs)
-for f in include/SDL2/SDL.h lib/libSDL2.a; do
+# SDL 2 and SDL2_mixer from the stove's SDK (GFOpenGPU's link stubs: the
+# program opens LIBS:GFOpenGPU/SDL2.module and SDL2_mixer.module when it runs)
+for f in include/SDL2/SDL.h lib/libSDL2.a include/SDL2/SDL_mixer.h lib/libSDL2_mixer.a; do
     [ -f "$SDK/$f" ] || { echo "the stove has no $f"; exit 2; }
 done
 
@@ -122,7 +122,7 @@ FLAGS="-noixemul -m68040 -m68881 -pthread -fno-delete-null-pointer-checks -O2 -W
  -Wno-cpp -Wno-misleading-indentation -Wno-unknown-pragmas -Wno-parentheses
  -ffile-prefix-map=$WORK=. -I$WORK/include -I$WORK/src -I$WORK/src/dirfs
  -I$SDK/include/SDL2 -DTIXML_USE_STL -DBLOBBY_NO_NETWORK"
-LIBS="-lSDL2 -lm -pthread"
+LIBS="-lSDL2_mixer -lSDL2 -lm -pthread"
 
 (
     cd "$WORK/src"
@@ -156,7 +156,7 @@ from pathlib import Path
 here, out, pin, rev, epoch, stove, release, archive = Path(sys.argv[1]), Path(sys.argv[2]), *sys.argv[3:]
 sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
 sdk = Path(stove) / "prefix/m68k-amigaos"
-inputs = ["lib/libSDL2.a", "include/SDL2/SDL.h"]
+inputs = ["lib/libSDL2.a", "include/SDL2/SDL.h", "lib/libSDL2_mixer.a", "include/SDL2/SDL_mixer.h"]
 drawer = out / "BlobbyVolley2"
 receipt = {
     "upstream_commit": pin, "repository_commit": rev, "source_date_epoch": epoch,
