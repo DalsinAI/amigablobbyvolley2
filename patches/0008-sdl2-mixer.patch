@@ -1,8 +1,8 @@
 diff --git a/src/SoundManager.cpp b/src/SoundManager.cpp
-index 0ce5a1d..0d0d542 100644
+index 0ce5a1d..2bec5ed 100644
 --- a/src/SoundManager.cpp
 +++ b/src/SoundManager.cpp
-@@ -19,13 +19,54 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+@@ -19,13 +19,56 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  
  #include <iostream>
  #include <cassert>
@@ -23,6 +23,7 @@ index 0ce5a1d..0d0d542 100644
 +static SDL_atomic_t sBuffers;
 +static SDL_atomic_t sLate;
 +static SDL_atomic_t sLongestGap;
++static SDL_atomic_t sStarted;
 +static Uint32 sLastBuffer = 0;
 +static Uint32 sBufferTicks = 0;
 +
@@ -48,8 +49,9 @@ index 0ce5a1d..0d0d542 100644
 +	int buffers = SDL_AtomicSet(&sBuffers, 0);
 +	int late = SDL_AtomicSet(&sLate, 0);
 +	int longest = SDL_AtomicSet(&sLongestGap, 0);
-+	printf("audio %d buffers, %d late, longest gap %d ms\n",
-+		buffers, late, longest);
++	int started = SDL_AtomicSet(&sStarted, 0);
++	printf("audio %d buffers, %d late, longest gap %d ms, %d sounds started\n",
++		buffers, late, longest, started);
 +	fflush(stdout);
 +}
 +#endif
@@ -58,7 +60,7 @@ index 0ce5a1d..0d0d542 100644
  {
  	PHYSFS_file* fileHandle = PHYSFS_openRead(filename.c_str());
  	if (!fileHandle)
-@@ -34,51 +75,13 @@ Sound* SoundManager::loadSound(const std::string& filename)
+@@ -34,51 +77,13 @@ Sound* SoundManager::loadSound(const std::string& filename)
  	PHYSFS_uint8* fileBuffer = 
  		new PHYSFS_uint8[fileLength];
  	PHYSFS_read(fileHandle, fileBuffer, 1, fileLength);
@@ -116,7 +118,7 @@ index 0ce5a1d..0d0d542 100644
  }
  
  
-@@ -88,20 +91,20 @@ bool SoundManager::playSound(const std::string& filename, float volume)
+@@ -88,20 +93,24 @@ bool SoundManager::playSound(const std::string& filename, float volume)
  		return false;
  	try
  	{
@@ -142,13 +144,17 @@ index 0ce5a1d..0d0d542 100644
 +		int channel = Mix_PlayChannel(-1, chunk, 0);
 +		if (channel >= 0)
 +			Mix_Volume(channel, int(MIX_MAX_VOLUME * mVolume * volume));
++#if defined(__amigaos__)
++		if (channel >= 0)
++			SDL_AtomicAdd(&sStarted, 1);
++#endif
  	}
 -	catch (FileLoadException exception)
 +	catch (FileLoadException& exception)
  	{
  		std::cerr << "Warning: Couldn't load "
  			<< exception.filename << " !" << std::endl;
-@@ -112,75 +115,48 @@ bool SoundManager::playSound(const std::string& filename, float volume)
+@@ -112,75 +121,48 @@ bool SoundManager::playSound(const std::string& filename, float volume)
  
  bool SoundManager::init()
  {
@@ -250,7 +256,7 @@ index 0ce5a1d..0d0d542 100644
  	mInitialised = false;
  }
  
-@@ -193,6 +169,8 @@ SoundManager::SoundManager()
+@@ -193,6 +175,8 @@ SoundManager::SoundManager()
  {
  	mSingleton = this;
  	mInitialised = false;
@@ -259,7 +265,7 @@ index 0ce5a1d..0d0d542 100644
  }
  
  SoundManager::~SoundManager()
-@@ -217,23 +195,9 @@ void SoundManager::setVolume(float volume)
+@@ -217,23 +201,9 @@ void SoundManager::setVolume(float volume)
  
  void SoundManager::setMute(bool mute)
  {
