@@ -326,14 +326,14 @@ Joystick for the left player in Options, Input Options, and play.
 
 ### Sound, 3 November 2026
 
-Commit `e4a2ad4` adds `patches/0008-sdl2-mixer.patch` and links
+Commit `11ca769` adds `patches/0008-sdl2-mixer.patch` and links
 SDL2_mixer (`build-amiga.sh` checks the stove has `libSDL2_mixer.a` and its
 header, and the receipt names both). Executable (open5, Cradle job
 `j20261103T034436-8ab34b`): SHA-256
 `6073e10205ba1d5fef5f5aee0564d725b5167eefbc32bd17e4603cf3d6f47aa5`
 (2,129,788 bytes; `receipts/4-sound-open5-stove_build.json`). The data is
 step 3's. An earlier build of the same patch without the count of sounds
-started (`14b7c45`, job `j20261103T033621-d73fcd`) gave the same buffer
+started (`4b72b50`, job `j20261103T033621-d73fcd`) gave the same buffer
 readings over 85 seconds.
 
 In `lab:blobby`, with the settings as upstream has them (`global_volume`
@@ -363,7 +363,7 @@ Blobby Volley 2 keeps its settings (`config.xml`, and `inputconfig.xml`
 once Input Options has been used) and the replays a player saves
 (`replays/NAME.bvr`) in its write directory, which the port makes
 `PROGDIR:User` (`patches/0004`); nothing else is written. No change was
-needed for this step: the run below is step 4's build (`e4a2ad4`,
+needed for this step: the run below is step 4's build (`11ca769`,
 executable `6073e102...7aa5`) in `lab:blobby`.
 
 - Options, Misc Options: the background from the beach (`strand2.bmp`) to
@@ -393,7 +393,7 @@ which upstream offers to edit and was left as the number it suggests.
 
 ### Package: the drawer, GlowIcons, the start from Workbench and the LhA play test, 3 November 2026
 
-Commit `165e9a2` adds the package:
+Commit `a5d7636` adds the package:
 
 - `patches/0009-amiga-workbench.patch`: started from its icon, libnix gives
   the program no arguments (argc 0), so it starts as with no options from a
